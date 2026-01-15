@@ -311,7 +311,7 @@ body.ritual-mode #game-container {
     perspective: 1000px; /* Adiciona profundidade 3D */
 }
 
-.tarot-card {
+.codename-card {
     width: 60px;
     height: 90px;
     border: 1px solid #5c4b36;
@@ -325,7 +325,7 @@ body.ritual-mode #game-container {
     animation: fadeIn 0.1s forwards; /* Fallback simples */
 }
 
-.tarot-card:hover {
+.codename-card:hover {
     transform: scale(1.15);
     box-shadow: 0 0 10px #a63737;
     border-color: #a63737;
@@ -333,7 +333,7 @@ body.ritual-mode #game-container {
 }
 
 /* ANIMAÇÃO DE VIRAR CARTA */
-.tarot-card.flip-in {
+.codename-card.flip-in {
     animation: flipIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 

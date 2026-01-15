@@ -24,8 +24,9 @@
 
         <!-- LOBBY -->
         <div id="lobby-screen" style="display:none;">
-            <h3>Presentes no Salão:</h3>
+            <h3>Presentes no Salão (<span id="player-count">0</span>):</h3>
             <ul id="player-list"></ul>
+            <button id="btn-ready">Estou Pronto</button>
             <button id="btn-start">Iniciar Sessão</button>
         </div>
 
@@ -45,7 +46,7 @@
                         <button onclick="openDiary()" style="margin-top: 5px;">Meu Diário</button>
                         <button onclick="openClues()" style="margin-top: 5px; border-color: #4a6fa5; color: #8aa5d1;">Caderno de Pistas</button>
                         <div id="inventory-container" style="margin-top: 15px; border-top: 1px solid #5c4b36; padding-top: 10px;">
-                            <h4 style="margin: 0 0 10px 0; color: #a63737;">Cartas de Tarô</h4>
+                            <h4 style="margin: 0 0 10px 0; color: #a63737;">Codinomes</h4>
                             <ul id="card-list" style="list-style: none; padding: 0;"></ul>
                         </div>
                     </div>
@@ -65,7 +66,7 @@
                     <div id="log-box-combat" class="log-box" style="display:none;">
                     </div>
                     <div id="chat-controls">
-                        <input type="text" id="chat-input" placeholder="Mensagem... (/w Nome para sussurrar)" autocomplete="off" />
+                        <input type="text" id="chat-input" placeholder="Mensagem... (/w Nome, /o Ocultistas)" autocomplete="off" />
                         <button id="btn-send-chat">Enviar</button>
                     </div>
                 </div>

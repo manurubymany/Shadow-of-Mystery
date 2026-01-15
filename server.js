@@ -30,12 +30,12 @@ const PATHWAYS = {
     EXECUTIONER: { name: 'Caminho do Carrasco', role: 'Assassino', baseSanity: 7 }
 };
 
-// Definição das Cartas de Tarô
-const TAROT_CARDS = {
-    THE_FOOL: { id: 'THE_FOOL', name: 'O Louco', desc: 'Mensagem anônima.', image: 'the_fool.png' },
-    THE_MOON: { id: 'THE_MOON', name: 'A Lua', desc: 'Alucinação coletiva (-1 Sanidade).', image: 'the_moon.png' },
-    JUSTICE: { id: 'JUSTICE', name: 'A Justiça', desc: 'Revela o Caminho de um jogador.', image: 'justice.png' },
-    THE_MIRROR: { id: 'THE_MIRROR', name: 'O Espelho', desc: 'Troca Sanidade com outro.', image: 'the_mirror.png' }
+// Definição dos Codinomes
+const CODENAMES = {
+    GHOST: { id: 'GHOST', name: 'Codinome: Fantasma', desc: 'Mensagem anônima.', image: 'ghost.png' },
+    ECLIPSE: { id: 'ECLIPSE', name: 'Codinome: Eclipse', desc: 'Alucinação coletiva (-1 Sanidade).', image: 'eclipse.png' },
+    WATCHER: { id: 'WATCHER', name: 'Codinome: Observador', desc: 'Revela o Caminho de um jogador.', image: 'watcher.png' },
+    MIMIC: { id: 'MIMIC', name: 'Codinome: Mímico', desc: 'Troca Sanidade com outro.', image: 'mimic.png' }
 };
 
 const HALLUCINATIONS = [
@@ -69,9 +69,10 @@ io.on('connection', (socket) => {
             socketId: socket.id, // Armazena o socket atual para comunicação
             name: playerName,
             pathway: null,
+            isReady: false,
             sanity: 10,
             isDead: false,
-            inventory: [], // Cartas de Tarô iriam aqui
+            inventory: [], // Codinomes iriam aqui
             diary: "", // Anotações pessoais
             clues: [] // Pistas recebidas (apenas Detetives)
         };
@@ -79,6 +80,9 @@ io.on('connection', (socket) => {
         socketMap[socket.id] = playerId;
         socket.emit('joinSuccess', playerId); // Envia o ID para o cliente salvar
 
+        // Notifica a todos sobre o novo jogador com som e texto
+        io.emit('playerJoinedLobby', playerName);
+        io.emit('actionResult', { text: `${playerName} entrou no lobby.`, tab: 'system' });
         io.emit('updatePlayerList', Object.values(gameState.players));
     });
 
@@ -104,10 +108,33 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Sistema de Prontidão (Ready)
+    socket.on('toggleReady', () => {
+        const playerId = socketMap[socket.id];
+        const player = gameState.players[playerId];
+        if (player && gameState.phase === 'LOBBY') {
+            player.isReady = !player.isReady;
+            io.emit('updatePlayerList', Object.values(gameState.players));
+        }
+    });
+
     // Iniciar Partida (Apenas admin ou simplificado para teste)
     socket.on('startGame', () => {
-        if (Object.keys(gameState.players).length < 1) return; // Mínimo de jogadores
-        
+        if (Object.keys(gameState.players).length < 1) return; // Mínimo de jogadores        
+
+        const playerId = socketMap[socket.id];
+
+        const unready = Object.values(gameState.players).filter(p => !p.isReady);
+        if (unready.length > 0) {
+            socket.emit('actionResult', { text: `Não é possível iniciar. Aguardando: ${unready.map(p => p.name).join(', ')}`, tab: 'system' });
+            return;
+        }
+
+        const player = gameState.players[playerId];
+        if (!player) return; // Impede o início se o solicitante não for um jogador válido
+
+        io.emit('actionResult', { text: `${player.name} iniciou a sessão. O Véu se ergue...`, tab: 'system' });
+
         gameState.phase = 'GAME';
         assignRoles();
 
@@ -124,8 +151,9 @@ io.on('connection', (socket) => {
 
     // Ação de Jogador (Ex: Investigar, Usar Carta)
     socket.on('playerAction', (actionData) => {
-        if (gameState.phase !== 'GAME') return;
-        const player = gameState.players[socket.id];
+        const playerId = socketMap[socket.id];
+        const player = gameState.players[playerId];
+        if (!player || gameState.phase !== 'GAME') return;
         
         if (player.isDead) return;
 
@@ -143,17 +171,50 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        delete gameState.players[socket.id];
-        io.emit('updatePlayerList', Object.values(gameState.players));
+        const playerId = socketMap[socket.id];
+        if (playerId && gameState.players[playerId]) {
+            const player = gameState.players[playerId];
+            console.log(`Jogador ${player.name} desconectado.`);
+
+            // Anuncia a saída no log
+            io.emit('actionResult', { text: `${player.name} saiu do jogo.`, tab: 'system' });
+
+            // Dispara o som de saída apenas se estiver no lobby
+            if (gameState.phase === 'LOBBY') {
+                io.emit('playerLeftLobby', player.name);
+            }
+
+            delete gameState.players[playerId];
+            delete socketMap[socket.id];
+            io.emit('updatePlayerList', Object.values(gameState.players));
+        }
     });
 
     // Sistema de Chat
     socket.on('chatMessage', (msg) => {
-        const player = gameState.players[socket.id];
+        const playerId = socketMap[socket.id];
+        const player = gameState.players[playerId];
         if (!player) return;
 
         msg = String(msg).trim();
         if (!msg) return;
+
+        // Chat dos Ocultistas: /o Mensagem
+        if (msg.startsWith('/o ')) {
+            if (player.role !== 'Ocultista') {
+                socket.emit('actionResult', { text: "Você não compreende a língua das sombras.", tab: 'chat' });
+                return;
+            }
+
+            const text = msg.slice(3).trim();
+            if (!text) return;
+
+            const occultists = Object.values(gameState.players).filter(p => p.role === 'Ocultista');
+            occultists.forEach(p => {
+                io.to(p.socketId).emit('chatMessage', { sender: player.name, text, type: 'occult' });
+            });
+            return;
+        }
 
         // Verifica se é sussurro: /w Nome Mensagem
         if (msg.startsWith('/w ')) {
@@ -210,7 +271,7 @@ io.on('connection', (socket) => {
 
 function assignRoles() {
     const playerIds = Object.keys(gameState.players);
-    const cardKeys = Object.keys(TAROT_CARDS);
+    const cardKeys = Object.keys(CODENAMES);
     
     // Lógica simplificada de distribuição
     // Num jogo real, haveria balanceamento (1 Assassino, X Ocultistas, Y Detetives)
@@ -226,8 +287,8 @@ function assignRoles() {
         gameState.players[id].role = assignedPath.role; // Secreto no cliente real
         gameState.players[id].sanity = assignedPath.baseSanity;
         
-        // Distribui 1 Carta de Tarô Aleatória
-        const randomCard = TAROT_CARDS[cardKeys[Math.floor(Math.random() * cardKeys.length)]];
+        // Distribui 1 Codinome Aleatório
+        const randomCard = CODENAMES[cardKeys[Math.floor(Math.random() * cardKeys.length)]];
         gameState.players[id].inventory.push(randomCard);
     });
 
@@ -268,12 +329,12 @@ function handleAction(player, action) {
         });
     }
 
-    // Mecânica de Cartas de Tarô
-    if (action.type === 'USE_TAROT') {
+    // Mecânica de Codinomes
+    if (action.type === 'USE_CODENAME') {
         const cardIndex = action.cardIndex ?? 0;
 
         if (player.inventory.length === 0) {
-            io.to(player.socketId).emit('actionResult', "Você não possui cartas.");
+            io.to(player.socketId).emit('actionResult', "Você não possui codinomes.");
             return;
         }
 
@@ -284,13 +345,13 @@ function handleAction(player, action) {
 
         // Usa a carta selecionada
         const card = player.inventory.splice(cardIndex, 1)[0];
-        let msg = `[TARÔ] ${player.name} usou a carta ${card.name}!`;
+        let msg = `[CODINOME] ${player.name} ativou o protocolo ${card.name}!`;
 
         switch (card.id) {
-            case 'THE_FOOL':
-                io.emit('actionResult', `[O LOUCO] Uma voz sussurra: "A verdade é apenas uma mentira bem contada..."`);
+            case 'GHOST':
+                io.emit('actionResult', `[FANTASMA] Uma transmissão criptografada ecoa: "A verdade é apenas uma mentira bem contada..."`);
                 break;
-            case 'THE_MOON':
+            case 'ECLIPSE':
                 Object.values(gameState.players).forEach(p => {
                     p.sanity = Math.max(0, p.sanity - 1);
                     if (p.sanity <= 4) io.to(p.socketId).emit('sanityEffect', { type: 'HALLUCINATION' });
@@ -300,11 +361,11 @@ function handleAction(player, action) {
                 msg += " A sanidade de todos foi abalada.";
                 io.emit('actionResult', { text: msg, tab: 'combat' });
                 break;
-            case 'JUSTICE':
+            case 'WATCHER':
                 const target = Object.values(gameState.players).find(p => p.id !== player.id);
-                if (target) io.emit('actionResult', { text: `[A JUSTIÇA] O Véu se rasga: ${target.name} segue o ${target.pathway}.`, tab: 'system' });
+                if (target) io.emit('actionResult', { text: `[OBSERVADOR] O arquivo foi descriptografado: ${target.name} segue o ${target.pathway}.`, tab: 'system' });
                 break;
-            case 'THE_MIRROR':
+            case 'MIMIC':
                 const swapTarget = Object.values(gameState.players).find(p => p.id !== player.id);
                 if (swapTarget) {
                     [player.sanity, swapTarget.sanity] = [swapTarget.sanity, player.sanity];

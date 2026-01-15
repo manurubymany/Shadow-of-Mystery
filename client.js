@@ -26,6 +26,10 @@ const sfxVote = new Audio('assets/audio/bell_toll.mp3');
 const sfxDeath = new Audio('assets/audio/death_impact.mp3');
 const sfxRitual = new Audio('assets/audio/ritual_alarm.mp3');
 const sfxWhisper = new Audio('assets/audio/whisper.mp3');
+const sfxJoin = new Audio('assets/audio/door_open.mp3');
+sfxJoin.volume = 0.5;
+const sfxLeave = new Audio('assets/audio/door_close.mp3');
+sfxLeave.volume = 0.5;
 
 // Som de ambiente para a tela de login
 const sfxWind = new Audio('assets/audio/wind_howl.mp3');
@@ -52,6 +56,10 @@ document.getElementById('btn-join').onclick = () => {
     if (name) {
         socket.emit('joinGame', name);
     }
+};
+
+document.getElementById('btn-ready').onclick = () => {
+    socket.emit('toggleReady');
 };
 
 document.getElementById('btn-start').onclick = () => {
@@ -200,6 +208,16 @@ socket.on('gameStarted', (gameState) => {
     }
 });
 
+socket.on('playerJoinedLobby', () => {
+    // O servidor já envia uma mensagem de log via 'actionResult'.
+    // Apenas tocamos o som para evitar duplicidade de mensagens.
+    sfxJoin.play().catch(() => {});
+});
+
+socket.on('playerLeftLobby', () => {
+    sfxLeave.play().catch(() => {});
+});
+
 socket.on('actionResult', (data) => {
     // Suporta tanto string antiga quanto objeto novo { text, tab }
     if (typeof data === 'string') {
@@ -220,10 +238,20 @@ socket.on('sanityEffect', (effect) => {
 });
 
 socket.on('chatMessage', (data) => {
-    // data = { sender: 'Nome', text: 'msg', type: 'global'|'private' }
-    const color = data.type === 'private' ? '#ff6b6b' : '#d4c5a8'; // Vermelho claro para sussurros
-    const prefix = data.type === 'private' ? '[Sussurro]' : '[Global]';
-    if (data.type === 'private') sfxWhisper.play().catch(() => {});
+    // data = { sender: 'Nome', text: 'msg', type: 'global'|'private'|'occult' }
+    let color = '#d4c5a8';
+    let prefix = '[Global]';
+
+    if (data.type === 'private') {
+        color = '#ff6b6b';
+        prefix = '[Sussurro]';
+        sfxWhisper.play().catch(() => {});
+    } else if (data.type === 'occult') {
+        color = '#b388eb'; // Roxo místico
+        prefix = '[Sombra]';
+        sfxWhisper.play().catch(() => {});
+    }
+
     addLog(`${prefix} ${data.sender}: ${data.text}`, color, 'chat');
 });
 
@@ -338,7 +366,7 @@ function renderInventory(inventory) {
         const img = document.createElement('img');
         // Assume que as imagens estão em assets/cards/
         img.src = `assets/cards/${card.image}`;
-        img.className = 'tarot-card';
+        img.className = 'codename-card';
         img.alt = card.name;
         img.title = `${card.name}\n${card.desc}`; // Tooltip nativo
 
@@ -351,8 +379,8 @@ function renderInventory(inventory) {
         }
         
         img.onclick = () => {
-            if (confirm(`Deseja usar a carta "${card.name}"?`)) {
-                socket.emit('playerAction', { type: 'USE_TAROT', cardIndex: index });
+            if (confirm(`Deseja ativar o "${card.name}"?`)) {
+                socket.emit('playerAction', { type: 'USE_CODENAME', cardIndex: index });
             }
         };
         
@@ -374,7 +402,12 @@ function renderPlayerList() {
 
     currentPlayers.forEach(p => {
         const li = document.createElement('li');
-        li.innerText = p.name + (p.id === myId ? " (Você)" : "");
+        const readyStatus = p.isReady ? " [PRONTO]" : "";
+        li.innerText = p.name + (p.id === myId ? " (Você)" : "") + readyStatus;
+        
+        if (p.isReady) {
+            li.style.color = "#4caf50"; // Verde para indicar pronto
+        }
         
         if (p.isDead) {
             li.style.textDecoration = "line-through";
@@ -396,6 +429,14 @@ function renderPlayerList() {
 
         playerList.appendChild(li);
     });
+
+    // Atualiza o texto do meu botão
+    const me = currentPlayers.find(p => p.id === myId);
+    const btnReady = document.getElementById('btn-ready');
+    if (me && btnReady) {
+        btnReady.innerText = me.isReady ? "Cancelar" : "Estou Pronto";
+        btnReady.style.borderColor = me.isReady ? "#4caf50" : "#5c4b36";
+    }
 }
 
 function startBloodRain() {
