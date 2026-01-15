@@ -38,6 +38,22 @@ const CODENAMES = {
     MIMIC: { id: 'MIMIC', name: 'Codinome: Mímico', desc: 'Troca Sanidade com outro.', image: 'mimic.png' }
 };
 
+// Definição de Habilidades por Nível
+const ABILITIES = {
+    Detetive: {
+        2: { id: 'ANALYZE', name: 'Analisar Aura', cost: 2, desc: 'Chance de detectar intenções assassinas.', needsTarget: true, cooldown: 30 },
+        3: { id: 'TRUTH', name: 'Visão da Verdade', cost: 5, desc: 'Revela o papel exato de um alvo.', needsTarget: true, cooldown: 60 }
+    },
+    Ocultista: {
+        2: { id: 'HEAL', name: 'Restaurar Mente', cost: 1, desc: 'Recupera 3 de Sanidade de um alvo.', needsTarget: true, cooldown: 20 },
+        3: { id: 'BLAST', name: 'Sussurro do Caos', cost: 3, desc: 'Drena 3 de Sanidade de um alvo.', needsTarget: true, cooldown: 25 }
+    },
+    Assassino: {
+        2: { id: 'TERROR', name: 'Semear Terror', cost: 0, desc: 'Alvo perde 2 de Sanidade.', needsTarget: true, cooldown: 20 },
+        3: { id: 'SABOTAGE', name: 'Sabotagem', cost: 0, desc: 'Drena 15 de Sanidade Global instantaneamente.', needsTarget: false, cooldown: 60 }
+    }
+};
+
 const HALLUCINATIONS = [
     "Eles sabem o que você fez.",
     "Não confie neles.",
@@ -51,11 +67,21 @@ const HALLUCINATIONS = [
     "Acorde."
 ];
 
+const ROOM_PASSWORD = "1234"; // Defina a senha da sua sala aqui
+
 io.on('connection', (socket) => {
     console.log('Nova conexão:', socket.id);
 
-    // Jogador entra no Lobby
-    socket.on('joinGame', (playerName) => {
+    // Jogador entra no Lobby (Agora recebe objeto { name, password })
+    socket.on('joinGame', (data) => {
+        const playerName = data.name;
+        const password = data.password;
+
+        if (ROOM_PASSWORD && password !== ROOM_PASSWORD) {
+            socket.emit('errorMsg', 'Senha incorreta.');
+            return;
+        }
+
         if (gameState.phase !== 'LOBBY') {
             socket.emit('errorMsg', 'O jogo já começou.');
             return;
@@ -69,6 +95,9 @@ io.on('connection', (socket) => {
             socketId: socket.id, // Armazena o socket atual para comunicação
             name: playerName,
             pathway: null,
+            level: 1,
+            xp: 0,
+            abilityCooldowns: {}, // Armazena timestamp de quando a habilidade estará disponível
             isReady: false,
             sanity: 10,
             isDead: false,
@@ -295,6 +324,20 @@ function assignRoles() {
     console.log("Funções distribuídas. O Véu se ergue.");
 }
 
+function grantXP(player, amount) {
+    if (player.level >= 3) return; // Nível máximo
+
+    player.xp += amount;
+    
+    // Tabela de XP: Lvl 2 = 30xp, Lvl 3 = 80xp
+    const nextLevelXp = player.level === 1 ? 30 : 80;
+
+    if (player.xp >= nextLevelXp) {
+        player.level++;
+        io.to(player.socketId).emit('actionResult', { text: `✨ EVOLUÇÃO! Você alcançou o Nível ${player.level}. Nova habilidade desbloqueada!`, tab: 'system' });
+    }
+}
+
 function handleAction(player, action) {
     // Exemplo de mecânica de Sanidade
     if (action.type === 'INVESTIGATE_OCCULT') {
@@ -311,6 +354,8 @@ function handleAction(player, action) {
         } else {
             resultMsg = "Você encontrou uma pista oculta sem enlouquecer.";
             io.to(player.socketId).emit('actionResult', { text: resultMsg, tab: 'system' });
+            // Sucesso concede XP
+            grantXP(player, 10);
         }
 
         // Verifica colapso mental
@@ -325,7 +370,8 @@ function handleAction(player, action) {
         // Atualiza estado global para todos (sem revelar segredos)
         io.emit('stateUpdate', { 
             playerId: player.id, 
-            sanity: player.sanity 
+            sanity: player.sanity,
+            level: player.level
         });
     }
 
@@ -378,6 +424,86 @@ function handleAction(player, action) {
         }
 
         io.emit('gameStarted', gameState); // Atualiza UI de todos (Sanidade/Inventário)
+    }
+
+    // Uso de Habilidades de Classe
+    if (action.type === 'USE_ABILITY') {
+        const abilityId = action.abilityId;
+        const roleAbilities = ABILITIES[player.role];
+        
+        // Encontra a habilidade nos níveis desbloqueados
+        let ability = null;
+        for (let lvl = 2; lvl <= player.level; lvl++) {
+            if (roleAbilities[lvl] && roleAbilities[lvl].id === abilityId) {
+                ability = roleAbilities[lvl];
+                break;
+            }
+        }
+
+        if (!ability) return;
+
+        // Verifica Cooldown
+        if (player.abilityCooldowns[abilityId] && Date.now() < player.abilityCooldowns[abilityId]) {
+            const remaining = Math.ceil((player.abilityCooldowns[abilityId] - Date.now()) / 1000);
+            io.to(player.socketId).emit('actionResult', `Habilidade em recarga. Aguarde ${remaining}s.`);
+            return;
+        }
+
+        if (player.sanity < ability.cost) {
+            io.to(player.socketId).emit('actionResult', "Sanidade insuficiente para realizar este feito.");
+            return;
+        }
+
+        // Aplica Cooldown
+        if (ability.cooldown) {
+            player.abilityCooldowns[abilityId] = Date.now() + (ability.cooldown * 1000);
+        }
+
+        player.sanity -= ability.cost;
+        let target = null;
+        if (action.targetId) target = gameState.players[action.targetId];
+
+        let msg = `[HABILIDADE] ${player.name} usou ${ability.name}.`;
+
+        // Efeitos das Habilidades
+        switch (abilityId) {
+            case 'ANALYZE':
+                if (target) {
+                    const isKiller = target.role === 'Assassino';
+                    // 30% de chance de falhar/mentir se sanidade estiver baixa
+                    const result = (Math.random() > 0.3 || player.sanity > 5) 
+                        ? (isKiller ? "Aura Sombria (Suspeito)" : "Aura Estável (Provável Inocente)")
+                        : "Leitura Inconclusiva...";
+                    io.to(player.socketId).emit('actionResult', { text: `Análise de ${target.name}: ${result}`, tab: 'system' });
+                }
+                break;
+            case 'TRUTH':
+                if (target) {
+                    io.to(player.socketId).emit('actionResult', { text: `A Verdade se revela: ${target.name} é o ${target.role}.`, tab: 'system' });
+                }
+                break;
+            case 'HEAL':
+                if (target) {
+                    target.sanity = Math.min(10, target.sanity + 3);
+                    io.to(target.socketId).emit('actionResult', { text: `${player.name} restaurou sua mente. (+3 Sanidade)`, tab: 'system' });
+                }
+                break;
+            case 'BLAST':
+            case 'TERROR':
+                if (target) {
+                    const dmg = abilityId === 'BLAST' ? 3 : 2;
+                    target.sanity = Math.max(0, target.sanity - dmg);
+                    io.to(target.socketId).emit('sanityEffect', { type: 'HALLUCINATION' });
+                }
+                break;
+            case 'SABOTAGE':
+                gameState.sanityGlobal -= 15;
+                checkRitual();
+                io.emit('actionResult', { text: "Uma sabotagem profana abalou a estabilidade da mansão! (-15 Sanidade Global)", tab: 'combat' });
+                break;
+        }
+        
+        io.emit('updatePlayerList', Object.values(gameState.players));
     }
 
     // Habilidade Especial do Carrasco durante o Ritual

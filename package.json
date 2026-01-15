@@ -1,7 +1,7 @@
 {
   "name": "the-veiled-crown",
   "version": "1.0.0",
-  "description": "Shadows of the Fog - Multiplayer Social Deduction",
+  "description": "Um jogo de dedução social e horror cósmico.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -10,9 +10,7 @@
     "express": "^4.18.2",
     "socket.io": "^4.7.2"
   },
-  "keywords": [
-    "game",
-    "multiplayer",
-    "horror"
-  ]
+  "engines": {
+    "node": ">=14.x"
+  }
 }

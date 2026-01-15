@@ -11,11 +11,13 @@ const votingOverlay = document.getElementById('voting-overlay');
 const votingCandidates = document.getElementById('voting-candidates');
 const gameOverScreen = document.getElementById('game-over-screen');
 const winnerDisplay = document.getElementById('winner-display');
+const abilityContainer = document.getElementById('ability-container');
 const revealList = document.getElementById('reveal-list');
 const diaryOverlay = document.getElementById('diary-overlay');
 const diaryText = document.getElementById('diary-text');
 const cluesOverlay = document.getElementById('clues-overlay');
 const cluesList = document.getElementById('clues-list');
+const tutorialOverlay = document.getElementById('tutorial-overlay');
 
 // --- SISTEMA DE ÁUDIO ---
 const bgmAmbient = new Audio('assets/audio/ambient_loop.mp3');
@@ -53,8 +55,9 @@ let previousInventorySize = 0;
 
 document.getElementById('btn-join').onclick = () => {
     const name = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
     if (name) {
-        socket.emit('joinGame', name);
+        socket.emit('joinGame', { name, password });
     }
 };
 
@@ -64,6 +67,14 @@ document.getElementById('btn-ready').onclick = () => {
 
 document.getElementById('btn-start').onclick = () => {
     socket.emit('startGame');
+};
+
+document.getElementById('btn-close-tutorial').onclick = () => {
+    tutorialOverlay.style.display = 'none';
+};
+
+document.getElementById('btn-help').onclick = () => {
+    tutorialOverlay.style.display = 'flex';
 };
 
 btnSendChat.onclick = sendChat;
@@ -157,7 +168,12 @@ socket.on('joinSuccess', (playerId) => {
     if (loginScreen.style.display !== 'none' && gameScreen.style.display === 'none') {
         loginScreen.style.display = 'none';
         lobbyScreen.style.display = 'block';
+        tutorialOverlay.style.display = 'flex'; // Abre o tutorial ao entrar
     }
+});
+
+socket.on('errorMsg', (msg) => {
+    alert(msg);
 });
 
 socket.on('forceClearSession', () => {
@@ -169,12 +185,14 @@ socket.on('forceClearSession', () => {
 socket.on('updatePlayerList', (players) => {
     currentPlayers = players;
     renderPlayerList();
+    renderAbilities(); // Atualiza habilidades se o nível mudou
 });
 
 socket.on('reconnectUI', (phase) => {
     if (phase === 'LOBBY') {
         loginScreen.style.display = 'none';
         lobbyScreen.style.display = 'block';
+        // Opcional: tutorialOverlay.style.display = 'flex'; // Se quiser mostrar na reconexão também
     }
 });
 
@@ -188,7 +206,9 @@ socket.on('gameStarted', (gameState) => {
         myRole = me.role;
         document.getElementById('my-role').innerText = "Caminho: " + me.pathway;
         document.getElementById('my-sanity').innerText = me.sanity;
+        document.getElementById('my-level').innerText = me.level || 1;
         renderInventory(me.inventory);
+        renderAbilities();
         diaryText.value = me.diary || ""; // Carrega o diário salvo
         renderClues(me.clues || []); // Carrega pistas salvas
         addLog(`O jogo começou. Você trilha o ${me.pathway}.`);
@@ -403,7 +423,7 @@ function renderPlayerList() {
     currentPlayers.forEach(p => {
         const li = document.createElement('li');
         const readyStatus = p.isReady ? " [PRONTO]" : "";
-        li.innerText = p.name + (p.id === myId ? " (Você)" : "") + readyStatus;
+        li.innerText = `${p.name} (Lvl ${p.level || 1})${p.id === myId ? " (Você)" : ""}${readyStatus}`;
         
         if (p.isReady) {
             li.style.color = "#4caf50"; // Verde para indicar pronto
@@ -438,6 +458,66 @@ function renderPlayerList() {
         btnReady.style.borderColor = me.isReady ? "#4caf50" : "#5c4b36";
     }
 }
+
+function renderAbilities() {
+    abilityContainer.innerHTML = '';
+    const me = currentPlayers.find(p => p.id === myId);
+    if (!me || !me.role) return;
+
+    // Definição local para renderização (deve bater com o servidor)
+    const ABILITIES_UI = {
+        Detetive: {
+            2: { id: 'ANALYZE', name: 'Analisar Aura', cost: 2, target: true },
+            3: { id: 'TRUTH', name: 'Visão da Verdade', cost: 5, target: true }
+        },
+        Ocultista: {
+            2: { id: 'HEAL', name: 'Restaurar Mente', cost: 1, target: true },
+            3: { id: 'BLAST', name: 'Sussurro do Caos', cost: 3, target: true }
+        },
+        Assassino: {
+            2: { id: 'TERROR', name: 'Semear Terror', cost: 0, target: true },
+            3: { id: 'SABOTAGE', name: 'Sabotagem', cost: 0, target: false }
+        }
+    };
+
+    const myAbilities = ABILITIES_UI[me.role];
+    if (!myAbilities) return;
+
+    for (let lvl = 2; lvl <= (me.level || 1); lvl++) {
+        if (myAbilities[lvl]) {
+            const ab = myAbilities[lvl];
+            const btn = document.createElement('button');
+            btn.style.marginTop = "5px";
+            
+            // Verifica Cooldown
+            const cooldownEnd = me.abilityCooldowns && me.abilityCooldowns[ab.id] ? me.abilityCooldowns[ab.id] : 0;
+            const now = Date.now();
+            
+            if (cooldownEnd > now) {
+                const remaining = Math.ceil((cooldownEnd - now) / 1000);
+                btn.innerText = `${ab.name} (${remaining}s)`;
+                btn.disabled = true;
+                btn.style.borderColor = "#555";
+                btn.style.color = "#777";
+                btn.style.cursor = "not-allowed";
+            } else {
+                btn.innerText = `${ab.name} (Custo: ${ab.cost})`;
+                btn.style.borderColor = "#b388eb"; // Cor mística
+                btn.style.color = "#e0d0f5";
+                btn.onclick = () => useAbility(ab.id, ab.target, ab.name);
+            }
+            
+            abilityContainer.appendChild(btn);
+        }
+    }
+}
+
+// Atualiza a UI das habilidades a cada segundo para mostrar a contagem regressiva
+setInterval(() => {
+    if (document.getElementById('game-screen').style.display === 'block') {
+        renderAbilities();
+    }
+}, 1000);
 
 function startBloodRain() {
     const container = document.getElementById('blood-rain-container');

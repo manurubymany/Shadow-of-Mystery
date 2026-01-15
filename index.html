@@ -19,11 +19,13 @@
                 <div class="fog-layer two"></div>
             </div>
             <input type="text" id="username" placeholder="Seu Nome na Sociedade" />
+            <input type="password" id="password" placeholder="Senha da Sala" />
             <button id="btn-join">Entrar na Mansão</button>
         </div>
 
         <!-- LOBBY -->
         <div id="lobby-screen" style="display:none;">
+            <button id="btn-help" title="Ver Regras">?</button>
             <h3>Presentes no Salão (<span id="player-count">0</span>):</h3>
             <ul id="player-list"></ul>
             <button id="btn-ready">Estou Pronto</button>
@@ -37,10 +39,12 @@
                     <div id="char-info">
                         <h3>Ficha</h3>
                         <p id="my-role">Caminho: ???</p>
+                        <p>Nível: <span id="my-level">1</span> <span style="font-size:0.8em; color:#777;">(XP acumulado)</span></p>
                         <p>Sanidade: <span id="my-sanity">10</span>/10</p>
                     </div>
                     <div id="actions">
                         <button onclick="sendAction('INVESTIGATE_OCCULT')">Investigar Oculto</button>
+                        <div id="ability-container"></div> <!-- Botões de Habilidade aparecerão aqui -->
                         <button onclick="startVoting()" style="margin-top: 5px; color: #a63737; border-color: #a63737;">Convocar Julgamento</button>
                         <button onclick="confirmSacrifice()" class="sacrifice-btn">Sacrifício Final</button>
                         <button onclick="openDiary()" style="margin-top: 5px;">Meu Diário</button>
@@ -113,6 +117,33 @@
             <h2>Pistas Coletadas</h2>
             <ul id="clues-list"></ul>
             <button onclick="closeClues()" class="clues-close-btn">Fechar Caderno</button>
+        </div>
+    </div>
+
+    <!-- TUTORIAL OVERLAY -->
+    <div id="tutorial-overlay" style="display:none;">
+        <div class="fog-container">
+            <div class="fog-layer"></div>
+            <div class="fog-layer two"></div>
+        </div>
+        <div class="tutorial-content">
+            <h2>Guia de Sobrevivência</h2>
+            <div class="tutorial-body">
+                <p>Bem-vindo à Mansão. O Véu está fino e algo profano caminha entre nós.</p>
+                
+                <h3>🎭 Os Caminhos (Papéis)</h3>
+                <ul>
+                    <li><strong>Observador (Detetive):</strong> Recebe pistas sobre a identidade do assassino.</li>
+                    <li><strong>Sussurro (Ocultista):</strong> Inocente com conhecimentos arcanos.</li>
+                    <li><strong>Carrasco (Assassino):</strong> Deve eliminar a todos. Ganha poder total durante o Ritual.</li>
+                </ul>
+
+                <h3>👁️ Sanidade & Ritual</h3>
+                <p>Ações e ataques reduzem sua <strong>Sanidade</strong>. Se cair muito, você verá coisas que não existem. Se a Sanidade Global colapsar, o <strong>Ritual</strong> começa e o Carrasco pode matar livremente.</p>
+
+                <p><em>Descubra o assassino e vote nele antes que seja tarde.</em></p>
+            </div>
+            <button id="btn-close-tutorial">Entendi, aceito meu destino.</button>
         </div>
     </div>
 
