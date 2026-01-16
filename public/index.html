@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Shadow Of Mystery</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <header>
+            <h1>SHADOW OF MYSTERY</h1>
+            <h2 id="status-display">Conectando ao Véu...</h2>
+        </header>
+
+        <!-- TELA DE LOGIN -->
+        <div id="login-screen">
+            <div class="fog-container">
+                <div class="fog-layer"></div>
+                <div class="fog-layer two"></div>
+            </div>
+            <input type="text" id="username" placeholder="Seu Nome na Sociedade" />
+            <input type="password" id="password" placeholder="Senha da Sala" />
+            <button id="btn-join">Entrar na Mansão</button>
+        </div>
+
+        <!-- LOBBY -->
+        <div id="lobby-screen" style="display:none;">
+            <button id="btn-help" title="Ver Regras">?</button>
+            <h3>Presentes no Salão (<span id="player-count">0</span>):</h3>
+            <ul id="player-list"></ul>
+            <button id="btn-ready">Estou Pronto</button>
+            <button id="btn-start">Iniciar Sessão</button>
+        </div>
+
+        <!-- JOGO PRINCIPAL -->
+        <div id="game-screen" style="display:none;">
+            <div class="main-layout">
+                <div class="sidebar">
+                    <div id="char-info">
+                        <h3>Ficha</h3>
+                        <p id="my-role">Caminho: ???</p>
+                        <p>Nível: <span id="my-level">1</span> <span style="font-size:0.8em; color:#777;">(XP acumulado)</span></p>
+                        <p>Sanidade: <span id="my-sanity">10</span>/10</p>
+                    </div>
+                    <div id="actions">
+                        <button onclick="sendAction('INVESTIGATE_OCCULT')">Investigar Oculto</button>
+                        <div id="ability-container"></div> <!-- Botões de Habilidade aparecerão aqui -->
+                        <button onclick="startVoting()" style="margin-top: 5px; color: #a63737; border-color: #a63737;">Convocar Julgamento</button>
+                        <button onclick="confirmSacrifice()" class="sacrifice-btn">Sacrifício Final</button>
+                        <button onclick="openDiary()" style="margin-top: 5px;">Meu Diário</button>
+                        <button onclick="openClues()" style="margin-top: 5px; border-color: #4a6fa5; color: #8aa5d1;">Caderno de Pistas</button>
+                        <div id="inventory-container" style="margin-top: 15px; border-top: 1px solid #5c4b36; padding-top: 10px;">
+                            <h4 style="margin: 0 0 10px 0; color: #a63737;">Codinomes</h4>
+                            <ul id="card-list" style="list-style: none; padding: 0;"></ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="content">
+                    <div id="log-tabs">
+                        <button class="tab-btn active" onclick="switchTab('system')">Sistema</button>
+                        <button class="tab-btn" onclick="switchTab('chat')">Chat</button>
+                        <button class="tab-btn" onclick="switchTab('combat')">Combate</button>
+                    </div>
+                    <div id="log-box-system" class="log-box active">
+                        <p class="system-msg">Bem-vindo à Mansão Vitoriana.</p>
+                    </div>
+                    <div id="log-box-chat" class="log-box" style="display:none;">
+                    </div>
+                    <div id="log-box-combat" class="log-box" style="display:none;">
+                    </div>
+                    <div id="chat-controls">
+                        <input type="text" id="chat-input" placeholder="Mensagem... (/w Nome, /o Ocultistas)" autocomplete="off" />
+                        <button id="btn-send-chat">Enviar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <footer>
+            <p>Shadow Of Mystery © 2024</p>
+            <button id="btn-credits" class="footer-btn">Créditos</button>
+        </footer>
+    </div>
+
+    <!-- OVERLAY DE VOTAÇÃO -->
+    <div id="voting-overlay" style="display:none;">
+        <h2 style="color: #a63737;">O TRIBUNAL DAS SOMBRAS</h2>
+        <p>Quem deve ser purgado?</p>
+        <div id="voting-candidates"></div>
+    </div>
+
+    <!-- TELA DE MORTE -->
+    <div id="death-overlay">
+        VOCÊ ESTÁ MORTO
+    </div>
+
+    <!-- TELA DE FIM DE JOGO -->
+    <div id="game-over-screen" style="display:none;">
+        <h1 id="winner-display">FIM DE JOGO</h1>
+        <p id="win-reason" style="font-style: italic; margin-bottom: 20px;"></p>
+        <h3>Revelação dos Papéis:</h3>
+        <ul id="reveal-list"></ul>
+        <button onclick="location.reload()" style="margin-top: 20px;">Voltar ao Lobby</button>
+    </div>
+
+    <!-- EFEITO DE CHUVA DE SANGUE -->
+    <div id="blood-rain-container"></div>
+
+    <!-- DIÁRIO OVERLAY -->
+    <div id="diary-overlay" style="display:none;">
+        <div class="diary-paper">
+            <h2>Diário de Investigação</h2>
+            <textarea id="diary-text" placeholder="Escreva suas suspeitas aqui..." spellcheck="false"></textarea>
+            <button onclick="closeDiary()" class="diary-close-btn">Guardar Anotações</button>
+        </div>
+    </div>
+
+    <!-- CADERNO DE PISTAS OVERLAY -->
+    <div id="clues-overlay" style="display:none;">
+        <div class="clues-notebook">
+            <h2>Pistas Coletadas</h2>
+            <ul id="clues-list"></ul>
+            <button onclick="closeClues()" class="clues-close-btn">Fechar Caderno</button>
+        </div>
+    </div>
+
+    <!-- TUTORIAL OVERLAY -->
+    <div id="tutorial-overlay" style="display:none;">
+        <div class="fog-container">
+            <div class="fog-layer"></div>
+            <div class="fog-layer two"></div>
+        </div>
+        <div class="tutorial-content">
+            <h2>Guia de Sobrevivência</h2>
+            <div class="tutorial-body">
+                <p>Bem-vindo à Mansão. O Véu está fino e algo profano caminha entre nós.</p>
+                
+                <h3>🎭 Os Caminhos (Papéis)</h3>
+                <ul>
+                    <li><strong>Observador (Detetive):</strong> Recebe pistas sobre a identidade do assassino.</li>
+                    <li><strong>Sussurro (Ocultista):</strong> Inocente com conhecimentos arcanos.</li>
+                    <li><strong>Carrasco (Assassino):</strong> Deve eliminar a todos. Ganha poder total durante o Ritual.</li>
+                </ul>
+
+                <h3>👁️ Sanidade & Ritual</h3>
+                <p>Ações e ataques reduzem sua <strong>Sanidade</strong>. Se cair muito, você verá coisas que não existem. Se a Sanidade Global colapsar, o <strong>Ritual</strong> começa e o Carrasco pode matar livremente.</p>
+
+                <p><em>Descubra o assassino e vote nele antes que seja tarde.</em></p>
+            </div>
+            <button id="btn-close-tutorial">Entendi, aceito meu destino.</button>
+        </div>
+    </div>
+
+    <!-- CRÉDITOS OVERLAY -->
+    <div id="credits-overlay" style="display:none;">
+        <div class="credits-content">
+            <h2>Créditos</h2>
+            <p>Desenvolvido por:</p>
+            <ul class="dev-list">
+                <li>Gemini</li>
+                <li>Manuzinha</li>
+            </ul>
+            <p class="dedication">Com amor para P.</p>
+            <button id="btn-close-credits">Fechar</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="client.js"></script>
+</body>
+</html>

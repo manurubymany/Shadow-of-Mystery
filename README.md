@@ -1,7 +1,7 @@
-# THE VEILED CROWN: SHADOWS OF THE FOG
+# SHADOW OF MYSTERY
 
 ## 🌑 Visão Geral
-**The Veiled Crown** é um jogo multiplayer online de dedução social e horror cósmico ambientado em uma mansão vitoriana. Os jogadores assumem papéis secretos e devem descobrir quem é o assassino (Carrasco) antes que a sanidade coletiva colapse e o Ritual consuma a todos.
+**Shadow Of Mystery** é um jogo multiplayer online de dedução social e horror cósmico ambientado em uma mansão vitoriana. Os jogadores assumem papéis secretos e devem descobrir quem é o assassino (Carrasco) antes que a sanidade coletiva colapse e o Ritual consuma a todos.
 
 ## 🕹️ Regras e Mecânicas
 

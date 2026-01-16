@@ -17,8 +17,6 @@ ASSETS_DIR = os.path.join(PUBLIC_DIR, 'assets')
 # Mapeamento de Pastas
 DIRS = {
     'cards': os.path.join(ASSETS_DIR, 'cards'),
-    'chars': os.path.join(ASSETS_DIR, 'chars'),
-    'bg': os.path.join(ASSETS_DIR, 'bg'),
     'audio': os.path.join(ASSETS_DIR, 'audio') # Cria a pasta de áudio também
 }
 
@@ -60,6 +58,20 @@ def generate_placeholder(category, filename, color, size=(400, 600)):
     except Exception as e:
         print(f"Erro ao gerar {filename}: {e}")
 
+def generate_dummy_audio(filename):
+    """Gera um arquivo de áudio vazio para evitar erro 404."""
+    folder = DIRS['audio']
+    filepath = os.path.join(folder, filename)
+    
+    if os.path.exists(filepath):
+        print(f"Ignorado (já existe): audio/{filename}")
+        return
+
+    # Cria um arquivo vazio
+    with open(filepath, 'wb') as f:
+        f.write(b'') 
+    print(f"Gerado (Áudio Mudo): audio/{filename}")
+
 def scan_and_generate():
     # 1. Ler server.js para Cartas de Tarô
     server_path = os.path.join(BASE_DIR, 'server.js')
@@ -72,21 +84,19 @@ def scan_and_generate():
                 # Cartas de Tarô (Vermelho Escuro)
                 generate_placeholder('cards', m, (80, 20, 20), size=(300, 500))
 
-    # 2. Ler game.js para Personagens e Cenários
-    game_path = os.path.join(BASE_DIR, 'game.js')
-    if os.path.exists(game_path):
-        with open(game_path, 'r', encoding='utf-8') as f:
+    # 2. Ler client.js para Efeitos Sonoros
+    # Tenta achar o client.js na raiz ou na pasta public
+    client_path = os.path.join(BASE_DIR, 'client.js')
+    if not os.path.exists(client_path):
+        client_path = os.path.join(PUBLIC_DIR, 'client.js')
+
+    if os.path.exists(client_path):
+        with open(client_path, 'r', encoding='utf-8') as f:
             content = f.read()
-            
-            # Personagens (char: "nome.png") - Verde Escuro
-            char_matches = re.findall(r"char:\s*['\"](.+?)['\"]", content)
-            for m in char_matches:
-                generate_placeholder('chars', m.strip(), (20, 80, 20), size=(800, 600))
-            
-            # Cenários (bg: "nome.png") - Azul Escuro
-            bg_matches = re.findall(r"bg:\s*['\"](.+?)['\"]", content)
-            for m in bg_matches:
-                generate_placeholder('bg', m.strip(), (20, 20, 80), size=(800, 600))
+            # Regex para encontrar: new Audio('assets/audio/nome.mp3')
+            audio_matches = re.findall(r"new Audio\(['\"]assets/audio/(.+?)['\"]\)", content)
+            for m in audio_matches:
+                generate_dummy_audio(m.strip())
 
 def main():
     print("--- Gerador de Assets Placeholder ---")
