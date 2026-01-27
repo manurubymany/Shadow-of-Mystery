@@ -18,7 +18,25 @@
                 <div class="fog-layer"></div>
                 <div class="fog-layer two"></div>
             </div>
-            <input type="text" id="username" placeholder="Seu Nome na Sociedade" />
+            <select id="username">
+                <option value="" disabled selected>Escolha seu Destino...</option>
+                <option value="O Louco">O Louco</option>
+                <option value="O Mago">O Mago</option>
+                <option value="A Papisa">A Papisa</option>
+                <option value="A Imperatriz">A Imperatriz</option>
+                <option value="O Eremita">O Eremita</option>
+                <option value="A Justiça">A Justiça</option>
+                <option value="O Pendurado">O Pendurado</option>
+                <option value="A Morte">A Morte</option>
+                <option value="A Temperança">A Temperança</option>
+                <option value="O Diabo">O Diabo</option>
+                <option value="A Torre">A Torre</option>
+                <option value="A Estrela">A Estrela</option>
+                <option value="A Lua">A Lua</option>
+                <option value="O Sol">O Sol</option>
+                <option value="O Julgamento">O Julgamento</option>
+                <option value="O Mundo">O Mundo</option>
+            </select>
             <input type="password" id="password" placeholder="Senha da Sala" />
             <button id="btn-join">Entrar na Mansão</button>
         </div>
@@ -28,8 +46,20 @@
             <button id="btn-help" title="Ver Regras">?</button>
             <h3>Presentes no Salão (<span id="player-count">0</span>):</h3>
             <ul id="player-list"></ul>
+            
+            <!-- CHAT DO LOBBY -->
+            <div id="lobby-chat-container">
+                <div id="lobby-chat-log"></div>
+                <div class="chat-input-row">
+                    <input type="text" id="lobby-chat-input" placeholder="Conversar no lobby..." autocomplete="off">
+                    <button id="btn-lobby-chat">Enviar</button>
+                </div>
+            </div>
+
             <button id="btn-ready">Estou Pronto</button>
+            <button id="btn-add-bot" style="background-color: #2c3e50; border-color: #4a6fa5;">+ Bot</button>
             <button id="btn-start">Iniciar Sessão</button>
+            <button id="btn-leave" style="background-color: #3e2c2c; border-color: #a63737; margin-top: 10px; width: 100%;">Sair do Lobby</button>
         </div>
 
         <!-- JOGO PRINCIPAL -->
@@ -57,6 +87,26 @@
                 </div>
                 
                 <div class="content">
+                    <!-- ÁREA DE EXPLORAÇÃO (CENÁRIO) -->
+                    <div id="exploration-view">
+                        <div id="game-world">
+                            <div id="vignette"></div>
+                            <div id="spirit-vision-overlay"></div>
+                        </div>
+                        <div id="exploration-hud">
+                            <div id="stats-bars">
+                                <div class="bar-container"><div id="sanity-bar" class="bar-fill sanity" style="width: 100%;"></div></div>
+                                <div class="bar-container"><div id="spirit-bar" class="bar-fill spirit" style="width: 100%;"></div></div>
+                            </div>
+                            <button id="btn-spirit-vision" class="hud-btn">👁️</button>
+                        </div>
+                    </div>
+                    <div id="table-view" style="display:none;"><div class="table-surface"></div></div>
+                    <div id="room-controls" style="margin-bottom: 10px; padding: 5px; border: 1px solid #5c4b36; background: #111;">
+                        <div style="margin-bottom:5px;">Local: <strong id="current-room">...</strong></div>
+                        <div id="room-buttons" style="display:flex; gap:5px; flex-wrap:wrap;"></div>
+                    </div>
+
                     <div id="log-tabs">
                         <button class="tab-btn active" onclick="switchTab('system')">Sistema</button>
                         <button class="tab-btn" onclick="switchTab('chat')">Chat</button>
@@ -165,7 +215,9 @@
         </div>
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
+    <!-- Firebase SDK (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <script src="client.js"></script>
 </body>
 </html>

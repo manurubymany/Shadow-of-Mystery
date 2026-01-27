@@ -1,16 +1,13 @@
 {
   "name": "shadow-of-mystery",
   "version": "1.0.0",
-  "description": "Um jogo de dedução social e horror cósmico.",
+  "description": "Shadow Of Mystery - Jogo de Dedução Social",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "socket.io": "^4.7.2"
-  },
-  "engines": {
-    "node": ">=14.x"
+    "socket.io": "^4.7.4"
   }
 }

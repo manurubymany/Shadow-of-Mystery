@@ -1,4 +1,11 @@
-const socket = io();
+// --- CONFIGURAÇÃO FIREBASE ---
+const firebaseConfig = {
+    databaseURL: "https://shadow-of-mystery-default-rtdb.firebaseio.com/"
+    // Adicione apiKey se necessário, mas para RTDB aberto, a URL basta.
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const dbRef = db.ref();
 
 // Elementos DOM
 const loginScreen = document.getElementById('login-screen');
@@ -19,6 +26,9 @@ const cluesOverlay = document.getElementById('clues-overlay');
 const cluesList = document.getElementById('clues-list');
 const tutorialOverlay = document.getElementById('tutorial-overlay');
 const creditsOverlay = document.getElementById('credits-overlay');
+const lobbyChatInput = document.getElementById('lobby-chat-input');
+const btnLobbyChat = document.getElementById('btn-lobby-chat');
+const lobbyChatLog = document.getElementById('lobby-chat-log');
 
 // --- SISTEMA DE ÁUDIO ---
 const bgmAmbient = new Audio('assets/audio/ambient_loop.mp3');
@@ -34,15 +44,38 @@ sfxJoin.volume = 0.5;
 const sfxLeave = new Audio('assets/audio/door_close.mp3');
 sfxLeave.volume = 0.5;
 
+// Sons de Passos
+const sfxStepWood = new Audio('assets/audio/step_wood.mp3');
+const sfxStepStone = new Audio('assets/audio/step_stone.mp3');
+const sfxStepGrass = new Audio('assets/audio/step_grass.mp3');
+const sfxStepCarpet = new Audio('assets/audio/step_carpet.mp3');
+
+// Mapeamento de Materiais por Sala
+const ROOM_MATERIALS = {
+    'Salão': sfxStepWood,
+    'Biblioteca': sfxStepWood,
+    'Jardim': sfxStepGrass,
+    'Cozinha': sfxStepStone,
+    'Aposentos': sfxStepCarpet
+};
+
 // Som de ambiente para a tela de login
 const sfxWind = new Audio('assets/audio/wind_howl.mp3');
 sfxWind.loop = true;
 sfxWind.volume = 0.15;
-sfxWind.play().catch(() => {
-    document.addEventListener('click', () => {
-        sfxWind.play().catch(() => {});
-    }, { once: true });
-});
+
+// Música de Fundo do Menu
+const bgmMenu = new Audio('assets/audio/menu_theme.mp3');
+bgmMenu.loop = true;
+bgmMenu.volume = 0.3; // Ajuste o volume aqui (0.0 a 1.0)
+
+function playMenuAudio() {
+    sfxWind.play().catch(() => {});
+    bgmMenu.play().catch(() => {});
+}
+
+playMenuAudio();
+document.addEventListener('click', playMenuAudio, { once: true });
 
 // Estado Local
 let myId = null;
@@ -66,8 +99,19 @@ document.getElementById('btn-ready').onclick = () => {
     socket.emit('toggleReady');
 };
 
+document.getElementById('btn-add-bot').onclick = () => {
+    socket.emit('addBot');
+};
+
+document.getElementById('btn-leave').onclick = () => {
+    if (confirm("Deseja sair do lobby e voltar ao início?")) {
+        localStorage.removeItem('vc_playerId');
+        location.reload();
+    }
+};
+
 document.getElementById('btn-start').onclick = () => {
-    socket.emit('startGame');
+    startGameLogic();
 };
 
 document.getElementById('btn-close-tutorial').onclick = () => {
@@ -86,6 +130,11 @@ document.getElementById('btn-close-credits').onclick = () => {
     creditsOverlay.style.display = 'none';
 };
 
+btnLobbyChat.onclick = sendLobbyChat;
+lobbyChatInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendLobbyChat();
+});
+
 btnSendChat.onclick = sendChat;
 
 chatInput.addEventListener('keypress', (e) => {
@@ -95,8 +144,16 @@ chatInput.addEventListener('keypress', (e) => {
 function sendChat() {
     const text = chatInput.value.trim();
     if (text) {
-        socket.emit('chatMessage', text);
+        sendChatMessage(text);
         chatInput.value = '';
+    }
+}
+
+function sendLobbyChat() {
+    const text = lobbyChatInput.value.trim();
+    if (text) {
+        sendChatMessage(text);
+        lobbyChatInput.value = '';
     }
 }
 
@@ -123,7 +180,7 @@ window.openDiary = () => {
 
 window.closeDiary = () => {
     diaryOverlay.style.display = 'none';
-    socket.emit('updateDiary', diaryText.value);
+    db.ref('players/' + myId).update({ diary: diaryText.value });
 };
 
 window.openClues = () => {
@@ -139,7 +196,7 @@ let diaryTimeout;
 diaryText.addEventListener('input', () => {
     clearTimeout(diaryTimeout);
     diaryTimeout = setTimeout(() => {
-        socket.emit('updateDiary', diaryText.value);
+        if (myId) db.ref('players/' + myId).update({ diary: diaryText.value });
     }, 1000);
 });
 
@@ -170,6 +227,7 @@ socket.on('connect', () => {
 
 socket.on('joinSuccess', (playerId) => {
     sfxWind.pause(); // Para o som do vento ao entrar
+    bgmMenu.pause(); // Para a música do menu
     myId = playerId;
     localStorage.setItem('vc_playerId', playerId);
     
@@ -206,6 +264,8 @@ socket.on('reconnectUI', (phase) => {
 });
 
 socket.on('gameStarted', (gameState) => {
+    if (lobbyChatLog) lobbyChatLog.innerHTML = '';
+    if (lobbyChatInput) lobbyChatInput.value = '';
     lobbyScreen.style.display = 'none';
     gameScreen.style.display = 'block';
     
@@ -282,6 +342,15 @@ socket.on('chatMessage', (data) => {
     }
 
     addLog(`${prefix} ${data.sender}: ${data.text}`, color, 'chat');
+
+    // Adiciona ao chat do Lobby se estiver visível
+    if (lobbyScreen.style.display !== 'none' && lobbyChatLog) {
+        const p = document.createElement('p');
+        p.innerText = `${data.sender}: ${data.text}`;
+        p.style.color = color;
+        lobbyChatLog.appendChild(p);
+        lobbyChatLog.scrollTop = lobbyChatLog.scrollHeight;
+    }
 });
 
 socket.on('hintMessage', (msg) => {

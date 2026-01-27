@@ -109,6 +109,12 @@ h1 {
     width: 70%; /* Animação de expansão estilo anime */
 }
 
+#username option {
+    background-color: #1a1a1a;
+    color: #d4c5a8;
+    font-family: 'Courier New', monospace;
+}
+
 #btn-join {
     margin-top: 10px;
     position: relative;

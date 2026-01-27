@@ -17,7 +17,8 @@ ASSETS_DIR = os.path.join(PUBLIC_DIR, 'assets')
 # Mapeamento de Pastas
 DIRS = {
     'cards': os.path.join(ASSETS_DIR, 'cards'),
-    'audio': os.path.join(ASSETS_DIR, 'audio') # Cria a pasta de áudio também
+    'audio': os.path.join(ASSETS_DIR, 'audio'),
+    'bg': os.path.join(ASSETS_DIR, 'bg')
 }
 
 def ensure_directories():
@@ -63,13 +64,17 @@ def generate_dummy_audio(filename):
     folder = DIRS['audio']
     filepath = os.path.join(folder, filename)
     
+    # Se existe e tem conteúdo (tamanho > 0), ignora
     if os.path.exists(filepath):
-        print(f"Ignorado (já existe): audio/{filename}")
-        return
+        if os.path.getsize(filepath) > 0:
+            print(f"Ignorado (já existe): audio/{filename}")
+            return
+        else:
+            print(f"Regerando (estava vazio): audio/{filename}")
 
-    # Cria um arquivo vazio
+    # Cria um arquivo com dados fictícios para evitar erro 416 (Range Not Satisfiable)
     with open(filepath, 'wb') as f:
-        f.write(b'') 
+        f.write(b'DUMMY_AUDIO_DATA' * 1024) # Escreve ~16KB de dados inúteis
     print(f"Gerado (Áudio Mudo): audio/{filename}")
 
 def scan_and_generate():
@@ -83,6 +88,11 @@ def scan_and_generate():
             for m in matches:
                 # Cartas de Tarô (Vermelho Escuro)
                 generate_placeholder('cards', m, (80, 20, 20), size=(300, 500))
+            
+            # Objetos do Cenário (Adicionados manualmente baseados no código novo)
+            objects = ['note.png', 'key.png', 'mark.png', 'herb.png']
+            for obj in objects:
+                generate_placeholder('cards', obj, (100, 100, 50), size=(100, 100))
 
     # 2. Ler client.js para Efeitos Sonoros
     # Tenta achar o client.js na raiz ou na pasta public
@@ -97,6 +107,16 @@ def scan_and_generate():
             audio_matches = re.findall(r"new Audio\(['\"]assets/audio/(.+?)['\"]\)", content)
             for m in audio_matches:
                 generate_dummy_audio(m.strip())
+
+    # 2.1 Gerar Sons de Passos Específicos
+    step_sounds = ['step_wood.mp3', 'step_stone.mp3', 'step_grass.mp3', 'step_carpet.mp3']
+    for sound in step_sounds:
+        generate_dummy_audio(sound)
+
+    # 3. Gerar Backgrounds das Salas
+    rooms = ['salao.png', 'biblioteca.png', 'jardim.png', 'cozinha.png', 'aposentos.png']
+    for room in rooms:
+        generate_placeholder('bg', room, (20, 20, 40), size=(800, 400))
 
 def main():
     print("--- Gerador de Assets Placeholder ---")

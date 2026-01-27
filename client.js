@@ -67,75 +67,44 @@ let moveVector = { x: 0, y: 0 };
 
 // --- EVENTOS DE UI ---
 
-// 1. Botão de Entrar (Integrado ao Firebase)
 document.getElementById('btn-join').onclick = () => {
     const name = document.getElementById('username').value;
     const password = document.getElementById('password').value;
-    
-    // O Firebase exige um formato de e-mail, então adaptamos seu nome de usuário
-    const email = name.toLowerCase().replace(/\s/g, '') + "@mansao.com";
-
-    if (name && password) {
-        document.getElementById('status-display').innerText = "Validando no cofre...";
-
-        // Chama a autenticação do Firebase configurada no index.html
-        window.fbMethods.signInWithEmailAndPassword(window.fbAuth, email, password)
-            .then((userCredential) => {
-                console.log("Acesso concedido:", userCredential.user.uid);
-                
-                // Após o Firebase validar, emitimos para o seu servidor Socket.io
-                socket.emit('joinGame', { name, password });
-            })
-            .catch((error) => {
-                console.error("Erro Firebase:", error.code);
-                alert("O Véu rejeitou seu acesso. Verifique seu nome e senha ou crie sua conta no console.");
-                document.getElementById('status-display').innerText = "Acesso Negado.";
-            });
-    } else {
-        alert("Por favor, preencha seu nome e a senha secreta.");
+    if (name) {
+        socket.emit('joinGame', { name, password });
     }
 };
 
-// 2. Botões do Lobby
 document.getElementById('btn-ready').onclick = () => {
     socket.emit('toggleReady');
+};
+
+document.getElementById('btn-leave').onclick = () => {
+    if (confirm("Deseja sair do lobby e voltar ao início?")) {
+        localStorage.removeItem('vc_playerId');
+        location.reload();
+    }
 };
 
 document.getElementById('btn-start').onclick = () => {
     socket.emit('startGame');
 };
 
-// 3. Sistema de Tutorial (Guia de Sobrevivência)
-document.getElementById('btn-help').onclick = () => {
-    document.getElementById('tutorial-overlay').style.display = 'flex';
-};
-
 document.getElementById('btn-close-tutorial').onclick = () => {
-    document.getElementById('tutorial-overlay').style.display = 'none';
+    tutorialOverlay.style.display = 'none';
 };
 
-// 4. Diário e Pistas (Elementos de Mistério)
-window.openDiary = () => {
-    document.getElementById('diary-overlay').style.display = 'flex';
+document.getElementById('btn-help').onclick = () => {
+    tutorialOverlay.style.display = 'flex';
 };
 
-window.closeDiary = () => {
-    const text = document.getElementById('diary-text').value;
-    // DICA: Você pode usar fbMethods.set(fbMethods.ref(fbDb, 'diarios/' + auth.uid), text) para salvar no Firebase!
-    document.getElementById('diary-overlay').style.display = 'none';
+document.getElementById('btn-credits').onclick = () => {
+    creditsOverlay.style.display = 'flex';
 };
 
-window.openClues = () => {
-    document.getElementById('clues-overlay').style.display = 'flex';
+document.getElementById('btn-close-credits').onclick = () => {
+    creditsOverlay.style.display = 'none';
 };
-
-window.closeClues = () => {
-    document.getElementById('clues-overlay').style.display = 'none';
-};
-
-// 5. Sistema de Chat
-const btnSendChat = document.getElementById('btn-send-chat');
-const chatInput = document.getElementById('chat-input');
 
 btnSendChat.onclick = sendChat;
 
@@ -151,14 +120,6 @@ function sendChat() {
     }
 }
 
-// 6. Abas do Log (Sistema, Chat, Combate)
-window.switchTab = (tab) => {
-    document.querySelectorAll('.log-box').forEach(box => box.style.display = 'none');
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    
-    document.getElementById('log-box-' + tab).style.display = 'block';
-    event.currentTarget.classList.add('active');
-};
 // Botão de Visão Espiritual
 btnSpiritVision.onmousedown = () => toggleSpiritVision(true);
 btnSpiritVision.onmouseup = () => toggleSpiritVision(false);
@@ -984,5 +945,4 @@ joystickArea.addEventListener('touchmove', (e) => {
 joystickArea.addEventListener('touchend', () => {
     moveVector = { x: 0, y: 0 };
     joystickKnob.style.transform = `translate(0px, 0px)`;
-
 });
