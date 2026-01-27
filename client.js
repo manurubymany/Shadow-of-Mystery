@@ -124,8 +124,14 @@ document.getElementById('btn-join').onclick = () => {
 
     if (name) {
         joinGameFirebase(name);
+    } else {
+        alert("Por favor, escolha uma Carta (Nome) na lista antes de entrar.");
     }
 };
+
+document.getElementById('password').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') document.getElementById('btn-join').click();
+});
 
 document.getElementById('btn-ready').onclick = () => {
     if (!myId) return;

@@ -85,6 +85,7 @@ let isRitualActive = false;
 let currentPlayers = [];
 let previousInventorySize = 0;
 let gameState = null;
+let currentRoomId = null;
 let isHost = false; // Determina se este cliente processa as regras do jogo
 
 // --- CONSTANTES DO JOGO (Lógica Local) ---
@@ -128,8 +129,8 @@ document.getElementById('btn-join').onclick = () => {
 };
 
 document.getElementById('btn-ready').onclick = () => {
-    if (!myId) return;
-    db.ref('players/' + myId + '/isReady').transaction(val => !val);
+    if (!myId || !currentRoomId) return;
+    db.ref(`rooms/${currentRoomId}/players/${myId}/isReady`).transaction(val => !val);
 };
 
 document.getElementById('btn-add-bot').onclick = () => {
@@ -138,7 +139,7 @@ document.getElementById('btn-add-bot').onclick = () => {
     const botData = createPlayerObject(botId, botName);
     botData.isBot = true;
     botData.isReady = true;
-    db.ref('players/' + botId).set(botData);
+    db.ref(`rooms/${currentRoomId}/players/${botId}`).set(botData);
 };
 
 document.getElementById('btn-leave').onclick = () => {
@@ -203,14 +204,14 @@ window.sendAction = (type) => {
 
 window.startVoting = () => {
     if (isDead) return;
-    db.ref('gameState').update({ phase: 'VOTING', votes: {} });
+    db.ref(`rooms/${currentRoomId}/gameState`).update({ phase: 'VOTING', votes: {} });
     addLog("O Julgamento começou.", "#a63737", 'system');
 };
 
 window.confirmSacrifice = () => {
     if (isDead) return;
     if (confirm("VOCÊ ESTÁ PRESTES A SE SACRIFICAR.\n\nIsso causará sua morte permanente, mas restaurará a sanidade dos seus aliados.\n\nDeseja realmente fazer isso?")) {
-        db.ref('players/' + myId).update({ isDead: true });
+        db.ref(`rooms/${currentRoomId}/players/${myId}`).update({ isDead: true });
         addLog("Você se sacrificou pelo grupo.", "#ff0000", 'combat');
     }
 };
@@ -221,7 +222,7 @@ window.openDiary = () => {
 
 window.closeDiary = () => {
     diaryOverlay.style.display = 'none';
-    db.ref('players/' + myId).update({ diary: diaryText.value });
+    db.ref(`rooms/${currentRoomId}/players/${myId}`).update({ diary: diaryText.value });
 };
 
 window.openClues = () => {
@@ -237,7 +238,7 @@ let diaryTimeout;
 diaryText.addEventListener('input', () => {
     clearTimeout(diaryTimeout);
     diaryTimeout = setTimeout(() => {
-        if (myId) db.ref('players/' + myId).update({ diary: diaryText.value });
+        if (myId && currentRoomId) db.ref(`rooms/${currentRoomId}/players/${myId}`).update({ diary: diaryText.value });
     }, 1000);
 });
 
@@ -256,13 +257,15 @@ window.switchTab = (tabName) => {
 
 // --- LÓGICA FIREBASE ---
 
-function initFirebaseListeners() {
-    document.getElementById('status-display').innerText = "Conectado ao Véu (Firebase)";
+function initFirebaseListeners(roomId) {
+    if (!roomId) return;
+    currentRoomId = roomId;
+    document.getElementById('status-display').innerText = `Sala: ${roomId}`;
 
     // Tenta reconectar se houver sessão salva
     const storedId = localStorage.getItem('vc_playerId');
     if (storedId) {
-        db.ref('players/' + storedId).once('value').then(snap => {
+        db.ref(`rooms/${roomId}/players/${storedId}`).once('value').then(snap => {
             if (snap.exists()) {
                 myId = storedId;
                 onJoinSuccess();
@@ -273,7 +276,7 @@ function initFirebaseListeners() {
     }
 
     // Listener de Jogadores
-    db.ref('players').on('value', (snapshot) => {
+    db.ref(`rooms/${roomId}/players`).on('value', (snapshot) => {
         const val = snapshot.val();
         currentPlayers = val ? Object.values(val) : [];
         
@@ -302,7 +305,7 @@ function initFirebaseListeners() {
     });
 
     // Listener de Estado do Jogo
-    db.ref('gameState').on('value', (snapshot) => {
+    db.ref(`rooms/${roomId}/gameState`).on('value', (snapshot) => {
         const state = snapshot.val();
         if (!state) return;
         gameState = state;
@@ -326,7 +329,7 @@ function initFirebaseListeners() {
     });
 
     // Listener de Chat
-    db.ref('messages').limitToLast(10).on('child_added', (snapshot) => {
+    db.ref(`rooms/${roomId}/messages`).limitToLast(10).on('child_added', (snapshot) => {
         const msg = snapshot.val();
         addLog(`${msg.sender}: ${msg.text}`, null, 'chat');
         if (lobbyScreen.style.display !== 'none' && lobbyChatLog) {
@@ -338,19 +341,22 @@ function initFirebaseListeners() {
     });
 }
 
-initFirebaseListeners();
+// Tenta reconectar automaticamente se houver dados
+const savedRoomId = localStorage.getItem('vc_roomId');
+if (savedRoomId) {
+    initFirebaseListeners(savedRoomId);
+}
 
-function joinGameFirebase(name) {
+function joinGameFirebase(name, roomId) {
     const playerId = 'player_' + Date.now() + Math.random().toString(36).substr(2, 5);
     const playerData = createPlayerObject(playerId, name);
     
-    db.ref('players/' + playerId).set(playerData).then(() => {
+    db.ref(`rooms/${roomId}/players/${playerId}`).set(playerData).then(() => {
         myId = playerId;
+        currentRoomId = roomId;
         localStorage.setItem('vc_playerId', playerId);
+        localStorage.setItem('vc_roomId', roomId);
         onJoinSuccess();
-    }).catch((error) => {
-        console.error("Erro Firebase:", error);
-        alert("Erro ao entrar no jogo: " + error.message + "\n\nVerifique se as Regras do Firebase estão como '.read': true e '.write': true");
     });
 }
 
@@ -411,7 +417,7 @@ function onGameStarted() {
 function sendChatMessage(text) {
     const me = currentPlayers.find(p => p.id === myId);
     const name = me ? me.name : "Desconhecido";
-    db.ref('messages').push({ sender: name, text: text, timestamp: Date.now() });
+    db.ref(`rooms/${currentRoomId}/messages`).push({ sender: name, text: text, timestamp: Date.now() });
 }
 
 function startVotingUI() {
@@ -424,7 +430,7 @@ function startVotingUI() {
             btn.className = 'vote-btn';
             btn.innerText = `Condenar ${p.name}`;
             btn.onclick = () => {
-                db.ref('gameState/votes/' + myId).set(p.id);
+                db.ref(`rooms/${currentRoomId}/gameState/votes/${myId}`).set(p.id);
                 votingCandidates.innerHTML = '<p>Voto registrado. Aguardando veredito...</p>';
             };
             votingCandidates.appendChild(btn);
@@ -458,15 +464,15 @@ function startGameLogic() {
         const availableCards = Object.values(CODENAMES).filter(c => c.pathway === assigned.role || c.pathway === 'Especial');
         const card = availableCards[Math.floor(Math.random() * availableCards.length)];
 
-        updates[`players/${id}/role`] = assigned.role;
-        updates[`players/${id}/pathway`] = assigned.name;
-        updates[`players/${id}/sanity`] = assigned.baseSanity;
-        updates[`players/${id}/name`] = card.name;
-        updates[`players/${id}/inventory`] = [CODENAMES.THE_FOOL];
+        updates[`rooms/${currentRoomId}/players/${id}/role`] = assigned.role;
+        updates[`rooms/${currentRoomId}/players/${id}/pathway`] = assigned.name;
+        updates[`rooms/${currentRoomId}/players/${id}/sanity`] = assigned.baseSanity;
+        updates[`rooms/${currentRoomId}/players/${id}/name`] = card.name;
+        updates[`rooms/${currentRoomId}/players/${id}/inventory`] = [CODENAMES.THE_FOOL];
     });
 
-    updates['gameState/phase'] = 'GAME';
-    updates['gameState/ritualActive'] = false;
+    updates[`rooms/${currentRoomId}/gameState/phase`] = 'GAME';
+    updates[`rooms/${currentRoomId}/gameState/ritualActive`] = false;
     db.ref().update(updates);
 }
 
@@ -483,7 +489,7 @@ function handleInvestigate() {
         addLog("Você encontrou uma pista oculta.", "#00ff00", 'system');
     } else {
         addLog("Sua mente vacila ao olhar o abismo. (-1 Sanidade)", "#ff0000", 'combat');
-        db.ref(`players/${myId}/sanity`).transaction(s => (s || 10) - 1);
+        db.ref(`rooms/${currentRoomId}/players/${myId}/sanity`).transaction(s => (s || 10) - 1);
     }
 }
 
@@ -587,7 +593,7 @@ function renderPlayerList() {
             btnKill.style.marginLeft = "10px";
             btnKill.onclick = () => {
                 if (confirm(`Deseja executar ${p.name}? Esta ação é irreversível.`)) {
-                    db.ref(`players/${p.id}/isDead`).set(true);
+                    db.ref(`rooms/${currentRoomId}/players/${p.id}/isDead`).set(true);
                     addLog(`Você executou ${p.name}.`, "#ff0000", 'combat');
                 }
             };
