@@ -48,13 +48,12 @@ Ao iniciar a partida, cada jogador recebe secretamente um Caminho:
     /Ruins
       ├── server.js
       ├── package.json
-      └── public/
-          ├── index.html
-          ├── style.css
-          ├── client.js
-          └── assets/
-              ├── audio/  (Arquivos .mp3)
-              └── cards/  (Arquivos .png)
+      ├── index.html
+      ├── style.css
+      ├── client.js
+      └── assets/
+          ├── audio/  (Arquivos .mp3)
+          └── cards/  (Arquivos .png)
     ```
 
 3.  **Inicie o Servidor:**
@@ -67,7 +66,7 @@ Ao iniciar a partida, cada jogador recebe secretamente um Caminho:
     *Dica: Abra múltiplas abas ou janelas anônimas para testar com vários jogadores.*
 
 ### Assets Necessários
-Para que o jogo funcione perfeitamente (sem erros 404), adicione os arquivos de mídia nas pastas `public/assets/audio/` (ex: `wind_howl.mp3`, `bell_toll.mp3`) e `public/assets/cards/` (ex: `the_fool.png`).
+Para que o jogo funcione perfeitamente (sem erros 404), adicione os arquivos de mídia nas pastas `assets/audio/` (ex: `wind_howl.mp3`, `bell_toll.mp3`) e `assets/cards/` (ex: `the_fool.png`).
 
 ---
 *Desenvolvido com Node.js, Socket.io e Horror Cósmico.*

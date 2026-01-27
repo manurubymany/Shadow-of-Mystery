@@ -11,8 +11,7 @@ except ImportError:
 
 # Configurações de Caminho
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PUBLIC_DIR = os.path.join(BASE_DIR, 'public')
-ASSETS_DIR = os.path.join(PUBLIC_DIR, 'assets')
+ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
 
 # Mapeamento de Pastas
 DIRS = {
@@ -97,8 +96,6 @@ def scan_and_generate():
     # 2. Ler client.js para Efeitos Sonoros
     # Tenta achar o client.js na raiz ou na pasta public
     client_path = os.path.join(BASE_DIR, 'client.js')
-    if not os.path.exists(client_path):
-        client_path = os.path.join(PUBLIC_DIR, 'client.js')
 
     if os.path.exists(client_path):
         with open(client_path, 'r', encoding='utf-8') as f:
@@ -122,7 +119,7 @@ def main():
     print("--- Gerador de Assets Placeholder ---")
     ensure_directories()
     scan_and_generate()
-    print("\nConcluído! Verifique a pasta public/assets.")
+    print("\nConcluído! Verifique a pasta assets.")
 
 if __name__ == "__main__":
     main()

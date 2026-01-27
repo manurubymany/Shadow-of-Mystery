@@ -1,4 +1,11 @@
-const socket = io();
+// --- CONFIGURAÇÃO FIREBASE ---
+const firebaseConfig = {
+    databaseURL: "https://shadow-of-mystery-default-rtdb.firebaseio.com/"
+    // Adicione apiKey se necessário, mas para RTDB aberto, a URL basta.
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const dbRef = db.ref();
 
 // Elementos DOM
 const loginScreen = document.getElementById('login-screen');
@@ -17,18 +24,11 @@ const diaryOverlay = document.getElementById('diary-overlay');
 const diaryText = document.getElementById('diary-text');
 const cluesOverlay = document.getElementById('clues-overlay');
 const cluesList = document.getElementById('clues-list');
-const ingredientsList = document.getElementById('ingredients-list');
 const tutorialOverlay = document.getElementById('tutorial-overlay');
 const creditsOverlay = document.getElementById('credits-overlay');
-const merchantContainer = document.getElementById('merchant-container');
-const merchantList = document.getElementById('merchant-list');
-const shuffleOverlay = document.getElementById('shuffle-overlay');
-const roomButtonsContainer = document.getElementById('room-buttons');
-const explorationView = document.getElementById('exploration-view');
-const tableView = document.getElementById('table-view');
-const gameWorld = document.getElementById('game-world');
-const spiritVisionOverlay = document.getElementById('spirit-vision-overlay');
-const btnSpiritVision = document.getElementById('btn-spirit-vision');
+const lobbyChatInput = document.getElementById('lobby-chat-input');
+const btnLobbyChat = document.getElementById('btn-lobby-chat');
+const lobbyChatLog = document.getElementById('lobby-chat-log');
 
 // --- SISTEMA DE ÁUDIO ---
 const bgmAmbient = new Audio('assets/audio/ambient_loop.mp3');
@@ -44,15 +44,38 @@ sfxJoin.volume = 0.5;
 const sfxLeave = new Audio('assets/audio/door_close.mp3');
 sfxLeave.volume = 0.5;
 
+// Sons de Passos
+const sfxStepWood = new Audio('assets/audio/step_wood.mp3');
+const sfxStepStone = new Audio('assets/audio/step_stone.mp3');
+const sfxStepGrass = new Audio('assets/audio/step_grass.mp3');
+const sfxStepCarpet = new Audio('assets/audio/step_carpet.mp3');
+
+// Mapeamento de Materiais por Sala
+const ROOM_MATERIALS = {
+    'Salão': sfxStepWood,
+    'Biblioteca': sfxStepWood,
+    'Jardim': sfxStepGrass,
+    'Cozinha': sfxStepStone,
+    'Aposentos': sfxStepCarpet
+};
+
 // Som de ambiente para a tela de login
 const sfxWind = new Audio('assets/audio/wind_howl.mp3');
 sfxWind.loop = true;
 sfxWind.volume = 0.15;
-sfxWind.play().catch(() => {
-    document.addEventListener('click', () => {
-        sfxWind.play().catch(() => {});
-    }, { once: true });
-});
+
+// Música de Fundo do Menu
+const bgmMenu = new Audio('assets/audio/menu_theme.mp3');
+bgmMenu.loop = true;
+bgmMenu.volume = 0.3; // Ajuste o volume aqui (0.0 a 1.0)
+
+function playMenuAudio() {
+    sfxWind.play().catch(() => {});
+    bgmMenu.play().catch(() => {});
+}
+
+playMenuAudio();
+document.addEventListener('click', playMenuAudio, { once: true });
 
 // Estado Local
 let myId = null;
@@ -61,22 +84,61 @@ let myRole = null;
 let isRitualActive = false;
 let currentPlayers = [];
 let previousInventorySize = 0;
-let spiritVisionActive = false;
-let movementInterval = null;
-let moveVector = { x: 0, y: 0 };
+let gameState = null;
+let isHost = false; // Determina se este cliente processa as regras do jogo
+
+// --- CONSTANTES DO JOGO (Lógica Local) ---
+const PATHWAYS = {
+    DEATH: { name: 'Caminho da Morte', role: 'Carrasco', baseSanity: 6 },
+    SEER: { name: 'Caminho do Vidente', role: 'Vidente', baseSanity: 8 },
+    SPECTATOR: { name: 'Caminho do Observador', role: 'Observador', baseSanity: 7 },
+    POET: { name: 'Caminho do Poeta', role: 'Poeta', baseSanity: 9 }
+};
+const CODENAMES = {
+    DEATH: { id: 'DEATH', name: 'A Morte', desc: 'Impede análise de pistas.', image: 'death.png', pathway: 'Carrasco' },
+    THE_DEVIL: { id: 'THE_DEVIL', name: 'O Diabo', desc: 'Causa caos.', image: 'the_devil.png', pathway: 'Carrasco' },
+    THE_TOWER: { id: 'THE_TOWER', name: 'A Torre', desc: 'Destruição.', image: 'the_tower.png', pathway: 'Carrasco' },
+    THE_MAGICIAN: { id: 'THE_MAGICIAN', name: 'O Mago', desc: 'Copia carta.', image: 'the_magician.png', pathway: 'Vidente' },
+    HIGH_PRIESTESS: { id: 'HIGH_PRIESTESS', name: 'A Papisa', desc: 'Revela item.', image: 'high_priestess.png', needsTarget: true, pathway: 'Vidente' },
+    JUDGEMENT: { id: 'JUDGEMENT', name: 'O Julgamento', desc: 'Revela verdade.', image: 'judgement.png', pathway: 'Vidente' },
+    THE_HERMIT: { id: 'THE_HERMIT', name: 'O Eremita', desc: 'Ilumina.', image: 'the_hermit.png', pathway: 'Observador' },
+    THE_MOON: { id: 'THE_MOON', name: 'A Lua', desc: 'Alucinação.', image: 'the_moon.png', pathway: 'Observador' },
+    THE_STAR: { id: 'THE_STAR', name: 'A Estrela', desc: 'Esperança.', image: 'the_star.png', pathway: 'Observador' },
+    THE_SUN: { id: 'THE_SUN', name: 'O Sol', desc: 'Vitalidade.', image: 'the_sun.png', pathway: 'Poeta' },
+    THE_EMPRESS: { id: 'THE_EMPRESS', name: 'A Imperatriz', desc: 'Criação.', image: 'the_empress.png', pathway: 'Poeta' },
+    THE_WORLD: { id: 'THE_WORLD', name: 'O Mundo', desc: 'Sela Ruínas.', image: 'the_world.png', pathway: 'Poeta' },
+    THE_FOOL: { id: 'THE_FOOL', name: 'O Louco', desc: 'Enganação.', image: 'the_fool.png', needsInput: true, pathway: 'Especial' },
+    HANGED_MAN: { id: 'HANGED_MAN', name: 'O Pendurado', desc: 'Proteção.', image: 'hanged_man.png', needsTarget: true, pathway: 'Especial' }
+};
 
 // --- EVENTOS DE UI ---
 
 document.getElementById('btn-join').onclick = () => {
     const name = document.getElementById('username').value;
     const password = document.getElementById('password').value;
+    
+    if (password !== "12345") {
+        alert("Senha incorreta.");
+        return;
+    }
+
     if (name) {
-        socket.emit('joinGame', { name, password });
+        joinGameFirebase(name);
     }
 };
 
 document.getElementById('btn-ready').onclick = () => {
-    socket.emit('toggleReady');
+    if (!myId) return;
+    db.ref('players/' + myId + '/isReady').transaction(val => !val);
+};
+
+document.getElementById('btn-add-bot').onclick = () => {
+    const botId = 'bot_' + Date.now() + Math.random().toString(36).substr(2, 5);
+    const botName = `Sombra ${Math.floor(Math.random() * 100)}`;
+    const botData = createPlayerObject(botId, botName);
+    botData.isBot = true;
+    botData.isReady = true;
+    db.ref('players/' + botId).set(botData);
 };
 
 document.getElementById('btn-leave').onclick = () => {
@@ -87,7 +149,7 @@ document.getElementById('btn-leave').onclick = () => {
 };
 
 document.getElementById('btn-start').onclick = () => {
-    socket.emit('startGame');
+    startGameLogic();
 };
 
 document.getElementById('btn-close-tutorial').onclick = () => {
@@ -106,6 +168,11 @@ document.getElementById('btn-close-credits').onclick = () => {
     creditsOverlay.style.display = 'none';
 };
 
+btnLobbyChat.onclick = sendLobbyChat;
+lobbyChatInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendLobbyChat();
+});
+
 btnSendChat.onclick = sendChat;
 
 chatInput.addEventListener('keypress', (e) => {
@@ -115,46 +182,36 @@ chatInput.addEventListener('keypress', (e) => {
 function sendChat() {
     const text = chatInput.value.trim();
     if (text) {
-        socket.emit('chatMessage', text);
+        sendChatMessage(text);
         chatInput.value = '';
     }
 }
 
-// Botão de Visão Espiritual
-btnSpiritVision.onmousedown = () => toggleSpiritVision(true);
-btnSpiritVision.onmouseup = () => toggleSpiritVision(false);
-btnSpiritVision.ontouchstart = (e) => { e.preventDefault(); toggleSpiritVision(true); };
-btnSpiritVision.ontouchend = (e) => { e.preventDefault(); toggleSpiritVision(false); };
+function sendLobbyChat() {
+    const text = lobbyChatInput.value.trim();
+    if (text) {
+        sendChatMessage(text);
+        lobbyChatInput.value = '';
+    }
+}
 
 window.sendAction = (type) => {
     if (isDead) return;
-    socket.emit('playerAction', { type: type });
+    // Ações genéricas (ex: Investigar)
+    if (type === 'INVESTIGATE_OCCULT') handleInvestigate();
 };
 
 window.startVoting = () => {
     if (isDead) return;
-    socket.emit('startVoting');
-};
-
-window.craftPotion = () => {
-    if (isDead) return;
-    socket.emit('craftPotion');
-};
-
-window.buyItem = (itemId) => {
-    if (isDead) return;
-    socket.emit('buyItem', itemId);
-};
-
-window.moveRoom = (roomName) => {
-    if (isDead) return;
-    socket.emit('moveRoom', roomName);
+    db.ref('gameState').update({ phase: 'VOTING', votes: {} });
+    addLog("O Julgamento começou.", "#a63737", 'system');
 };
 
 window.confirmSacrifice = () => {
     if (isDead) return;
     if (confirm("VOCÊ ESTÁ PRESTES A SE SACRIFICAR.\n\nIsso causará sua morte permanente, mas restaurará a sanidade dos seus aliados.\n\nDeseja realmente fazer isso?")) {
-        socket.emit('playerAction', { type: 'SACRIFICE' });
+        db.ref('players/' + myId).update({ isDead: true });
+        addLog("Você se sacrificou pelo grupo.", "#ff0000", 'combat');
     }
 };
 
@@ -164,7 +221,7 @@ window.openDiary = () => {
 
 window.closeDiary = () => {
     diaryOverlay.style.display = 'none';
-    socket.emit('updateDiary', diaryText.value);
+    db.ref('players/' + myId).update({ diary: diaryText.value });
 };
 
 window.openClues = () => {
@@ -180,7 +237,7 @@ let diaryTimeout;
 diaryText.addEventListener('input', () => {
     clearTimeout(diaryTimeout);
     diaryTimeout = setTimeout(() => {
-        socket.emit('updateDiary', diaryText.value);
+        if (myId) db.ref('players/' + myId).update({ diary: diaryText.value });
     }, 1000);
 });
 
@@ -197,22 +254,114 @@ window.switchTab = (tabName) => {
     activeBox.style.display = 'block';
 };
 
-// --- EVENTOS DO SOCKET ---
+// --- LÓGICA FIREBASE ---
 
-socket.on('connect', () => {
-    document.getElementById('status-display').innerText = "Conectado ao Servidor";
-    
+function initFirebaseListeners() {
+    document.getElementById('status-display').innerText = "Conectado ao Véu (Firebase)";
+
     // Tenta reconectar se houver sessão salva
     const storedId = localStorage.getItem('vc_playerId');
     if (storedId) {
-        socket.emit('reconnectGame', storedId);
+        db.ref('players/' + storedId).once('value').then(snap => {
+            if (snap.exists()) {
+                myId = storedId;
+                onJoinSuccess();
+            } else {
+                localStorage.removeItem('vc_playerId');
+            }
+        });
     }
-});
 
-socket.on('joinSuccess', (playerId) => {
+    // Listener de Jogadores
+    db.ref('players').on('value', (snapshot) => {
+        const val = snapshot.val();
+        currentPlayers = val ? Object.values(val) : [];
+        
+        // Verifica Host (o jogador mais antigo/primeiro da lista assume a lógica)
+        if (currentPlayers.length > 0) {
+            const sorted = currentPlayers.sort((a, b) => a.id.localeCompare(b.id));
+            if (sorted[0].id === myId && !isHost) {
+                isHost = true;
+                console.log("Você é o Host da sessão.");
+                startHostLoops();
+            }
+        }
+
+        renderPlayerList();
+        renderAbilities();
+        
+        const me = currentPlayers.find(p => p.id === myId);
+        if (me) {
+            if (me.isDead && !isDead) triggerDeath();
+            document.getElementById('my-sanity').innerText = me.sanity;
+            document.getElementById('my-level').innerText = me.level || 1;
+            renderInventory(me.inventory);
+            renderClues(me.clues || []);
+            if (me.diary && diaryText.value === "") diaryText.value = me.diary;
+        }
+    });
+
+    // Listener de Estado do Jogo
+    db.ref('gameState').on('value', (snapshot) => {
+        const state = snapshot.val();
+        if (!state) return;
+        gameState = state;
+
+        if (state.phase === 'GAME' && lobbyScreen.style.display !== 'none') {
+            onGameStarted();
+        }
+        
+        if (state.phase === 'VOTING' && votingOverlay.style.display === 'none') {
+            startVotingUI();
+        } else if (state.phase !== 'VOTING') {
+            votingOverlay.style.display = 'none';
+        }
+
+        if (state.ritualActive && !isRitualActive) {
+            document.body.classList.add('ritual-mode');
+            isRitualActive = true;
+            startBloodRain();
+            addLog("O RITUAL COMEÇOU!", "#ff0000", 'system');
+        }
+    });
+
+    // Listener de Chat
+    db.ref('messages').limitToLast(10).on('child_added', (snapshot) => {
+        const msg = snapshot.val();
+        addLog(`${msg.sender}: ${msg.text}`, null, 'chat');
+        if (lobbyScreen.style.display !== 'none' && lobbyChatLog) {
+            const p = document.createElement('p');
+            p.innerText = `${msg.sender}: ${msg.text}`;
+            lobbyChatLog.appendChild(p);
+            lobbyChatLog.scrollTop = lobbyChatLog.scrollHeight;
+        }
+    });
+}
+
+initFirebaseListeners();
+
+function joinGameFirebase(name) {
+    const playerId = 'player_' + Date.now() + Math.random().toString(36).substr(2, 5);
+    const playerData = createPlayerObject(playerId, name);
+    
+    db.ref('players/' + playerId).set(playerData).then(() => {
+        myId = playerId;
+        localStorage.setItem('vc_playerId', playerId);
+        onJoinSuccess();
+    });
+}
+
+function createPlayerObject(id, name) {
+    return {
+        id: id, name: name, room: 'Salão', x: 400, y: 300,
+        sanity: 10, isReady: false, isDead: false,
+        role: 'Desconhecido', pathway: '???', inventory: [], clues: [], diary: ""
+    };
+}
+
+function onJoinSuccess() {
     sfxWind.pause(); // Para o som do vento ao entrar
-    myId = playerId;
-    localStorage.setItem('vc_playerId', playerId);
+    bgmMenu.pause(); // Para a música do menu
     
     // Se for um novo login (não reconexão automática que já trata UI), mostra o lobby
     if (loginScreen.style.display !== 'none' && gameScreen.style.display === 'none') {
@@ -220,47 +369,22 @@ socket.on('joinSuccess', (playerId) => {
         lobbyScreen.style.display = 'block';
         tutorialOverlay.style.display = 'flex'; // Abre o tutorial ao entrar
     }
-});
+}
 
-socket.on('errorMsg', (msg) => {
-    alert(msg);
-});
-
-socket.on('forceClearSession', () => {
-    localStorage.removeItem('vc_playerId');
-    // Opcional: alert("Sessão expirada.");
-    location.reload();
-});
-
-socket.on('updatePlayerList', (players) => {
-    currentPlayers = players;
-    renderPlayerList();
-    renderAbilities(); // Atualiza habilidades se o nível mudou
-});
-
-socket.on('reconnectUI', (phase) => {
-    if (phase === 'LOBBY') {
-        loginScreen.style.display = 'none';
-        lobbyScreen.style.display = 'block';
-        // Opcional: tutorialOverlay.style.display = 'flex'; // Se quiser mostrar na reconexão também
-    }
-});
-
-socket.on('gameStarted', (gameState) => {
-    shuffleOverlay.style.display = 'none'; // Esconde a animação
+function onGameStarted() {
+    if (lobbyChatLog) lobbyChatLog.innerHTML = '';
+    if (lobbyChatInput) lobbyChatInput.value = '';
     lobbyScreen.style.display = 'none';
     gameScreen.style.display = 'block';
     
     // Identificar meu personagem
-    const me = gameState.players[myId];
+    const me = currentPlayers.find(p => p.id === myId);
     if (me) {
         myRole = me.role;
         document.getElementById('my-role').innerText = "Caminho: " + me.pathway;
-        updateStatsUI(me.sanity, me.spirituality);
-        document.getElementById('my-level').innerText = "Seq " + (me.level !== undefined ? me.level : 9);
-        updateRoomUI(me.room);
+        document.getElementById('my-sanity').innerText = me.sanity;
+        document.getElementById('my-level').innerText = me.level || 1;
         renderInventory(me.inventory);
-        renderIngredients(me.ingredients || []);
         renderAbilities();
         diaryText.value = me.diary || ""; // Carrega o diário salvo
         renderClues(me.clues || []); // Carrega pistas salvas
@@ -272,129 +396,32 @@ socket.on('gameStarted', (gameState) => {
         // Iniciar música ambiente (pode exigir interação do usuário dependendo do navegador)
         bgmAmbient.play().catch(e => console.log("Áudio bloqueado pelo navegador. Interaja com a página."));
 
-        if (gameState.ritualActive) {
+        if (gameState && gameState.ritualActive) {
             document.body.classList.add('ritual-mode');
             isRitualActive = true;
             startBloodRain();
             renderPlayerList();
         }
-
-        // Inicia loop de movimento
-        startMovementLoop();
     }
-});
+}
 
-socket.on('playerJoinedLobby', () => {
-    // O servidor já envia uma mensagem de log via 'actionResult'.
-    // Apenas tocamos o som para evitar duplicidade de mensagens.
-    sfxJoin.play().catch(() => {});
-});
+function sendChatMessage(text) {
+    const me = currentPlayers.find(p => p.id === myId);
+    const name = me ? me.name : "Desconhecido";
+    db.ref('messages').push({ sender: name, text: text, timestamp: Date.now() });
+}
 
-socket.on('playerLeftLobby', () => {
-    sfxLeave.play().catch(() => {});
-});
-
-socket.on('actionResult', (data) => {
-    // Suporta tanto string antiga quanto objeto novo { text, tab }
-    if (typeof data === 'string') {
-        addLog(data, null, 'system');
-    } else {
-        addLog(data.text, null, data.tab || 'system');
-    }
-});
-
-socket.on('sanityEffect', (effect) => {
-    if (effect.type === 'HALLUCINATION') {
-        document.body.style.filter = "sepia(100%) hue-rotate(90deg) blur(1px)";
-        setTimeout(() => {
-            document.body.style.filter = "none";
-        }, 3000);
-        addLog("Sua mente vacila...", '#ff6b6b', 'combat');
-    }
-});
-
-socket.on('chatMessage', (data) => {
-    // data = { sender: 'Nome', text: 'msg', type: 'global'|'private'|'occult' }
-    let color = '#d4c5a8';
-    let prefix = '[Global]';
-
-    if (data.type === 'private') {
-        color = '#ff6b6b';
-        prefix = '[Sussurro]';
-        sfxWhisper.play().catch(() => {});
-    } else if (data.type === 'occult') {
-        color = '#b388eb'; // Roxo místico
-        prefix = '[Sombra]';
-        sfxWhisper.play().catch(() => {});
-    }
-
-    addLog(`${prefix} ${data.sender}: ${data.text}`, color, 'chat');
-});
-
-socket.on('hintMessage', (msg) => {
-    addLog(`[PISTA] ${msg}`, '#00ff00', 'system'); // Verde brilhante para pistas
-});
-
-socket.on('updateClues', (clues) => {
-    renderClues(clues);
-});
-
-socket.on('updateIngredients', (ingredients) => {
-    renderIngredients(ingredients);
-});
-
-socket.on('merchantUpdate', (merchant) => {
-    if (merchant.active) {
-        merchantContainer.style.display = 'block';
-        merchantList.innerHTML = '';
-        merchant.items.forEach(item => {
-            const li = document.createElement('li');
-            li.style.marginBottom = '5px';
-            li.style.display = 'flex';
-            li.style.justifyContent = 'space-between';
-            li.style.alignItems = 'center';
-            
-            li.innerHTML = `
-                <span style="color: #d4c5a8;">${item.name}</span>
-                <button onclick="buyItem(${item.id})" style="font-size: 0.7em; padding: 2px 5px; border-color: #b388eb; color: #e0d0f5;">
-                    -${item.cost} San
-                </button>
-            `;
-            merchantList.appendChild(li);
-        });
-    } else {
-        merchantContainer.style.display = 'none';
-    }
-});
-
-socket.on('lightsOut', (isDark) => {
-    if (isDark) {
-        document.body.style.filter = "brightness(0.2) contrast(1.2)";
-    } else {
-        document.body.style.filter = "none";
-    }
-});
-
-socket.on('roleShuffleStart', () => {
-    shuffleOverlay.style.display = 'flex';
-    // Opcional: tocar um som de cartas embaralhando aqui se tiver
-});
-
-socket.on('votingStarted', (players) => {
+function startVotingUI() {
     votingOverlay.style.display = 'flex';
-    // Muda para layout de Mesa
-    explorationView.style.display = 'none';
-    tableView.style.display = 'flex';
-    
     votingCandidates.innerHTML = '';
 
-    players.forEach(p => {
+    currentPlayers.forEach(p => {
         if (!p.isDead) {
             const btn = document.createElement('button');
             btn.className = 'vote-btn';
             btn.innerText = `Condenar ${p.name}`;
             btn.onclick = () => {
-                socket.emit('castVote', p.id);
+                db.ref('gameState/votes/' + myId).set(p.id);
                 votingCandidates.innerHTML = '<p>Voto registrado. Aguardando veredito...</p>';
             };
             votingCandidates.appendChild(btn);
@@ -403,63 +430,59 @@ socket.on('votingStarted', (players) => {
 
     addLog("--- O JULGAMENTO COMEÇOU ---", "#a63737", 'system');
     sfxVote.play().catch(() => {});
-});
+}
 
-socket.on('votingEnded', () => {
-    votingOverlay.style.display = 'none';
-    // Volta para Exploração
-    explorationView.style.display = 'block';
-    tableView.style.display = 'none';
-});
+// --- LÓGICA DO HOST (SERVERLESS) ---
 
-socket.on('ritualStart', () => {
-    document.body.classList.add('ritual-mode');
-    isRitualActive = true;
-    sfxRitual.play().catch(() => {});
-    addLog("O CÉU SE TORNA SANGUE. O RITUAL ESTÁ ENTRE NÓS.", "#ff0000", 'system');
-    startBloodRain();
-    renderPlayerList();
-});
-
-socket.on('gameOver', (data) => {
-    // data = { winner: string, reason: string, players: object }
-    document.body.classList.remove('dead-mode'); // Remove filtro cinza se estiver morto
-    document.body.classList.remove('ritual-mode');
-    
-    lobbyScreen.style.display = 'none';
-    gameScreen.style.display = 'none';
-    votingOverlay.style.display = 'none';
-    document.getElementById('death-overlay').style.display = 'none';
-    document.getElementById('blood-rain-container').style.display = 'none';
-    gameOverScreen.style.display = 'flex';
-
-    stopMovementLoop();
-
-    winnerDisplay.innerText = `VENCEDOR: ${data.winner.toUpperCase()}`;
-    document.getElementById('win-reason').innerText = data.reason;
-
-    revealList.innerHTML = '';
-    Object.values(data.players).forEach(p => {
-        const li = document.createElement('li');
-        const status = p.isDead ? " (MORTO)" : " (VIVO)";
-        li.innerText = `${p.name} - ${p.role} [${p.pathway}]${status}`;
-        if (p.role === 'Carrasco') li.style.color = '#ff4444';
-        revealList.appendChild(li);
-    });
-});
-
-socket.on('updatePositions', (data) => {
-    // data = { id, x, y }
-    const avatar = document.getElementById(`avatar-${data.id}`);
-    if (avatar) {
-        avatar.style.left = data.x + 'px';
-        avatar.style.top = data.y + 'px';
+function startGameLogic() {
+    if (currentPlayers.length < 1) {
+        alert("Precisa de pelo menos 1 jogador.");
+        return;
     }
-});
 
-socket.on('updateStats', (stats) => {
-    updateStatsUI(stats.sanity, stats.spirituality);
-});
+    const playerIds = currentPlayers.map(p => p.id);
+    // Embaralha
+    for (let i = playerIds.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [playerIds[i], playerIds[j]] = [playerIds[j], playerIds[i]];
+    }
+
+    const updates = {};
+    playerIds.forEach((id, index) => {
+        const roles = [PATHWAYS.DEATH, PATHWAYS.SEER, PATHWAYS.SPECTATOR, PATHWAYS.POET];
+        const assigned = roles[index % roles.length];
+        
+        const availableCards = Object.values(CODENAMES).filter(c => c.pathway === assigned.role || c.pathway === 'Especial');
+        const card = availableCards[Math.floor(Math.random() * availableCards.length)];
+
+        updates[`players/${id}/role`] = assigned.role;
+        updates[`players/${id}/pathway`] = assigned.name;
+        updates[`players/${id}/sanity`] = assigned.baseSanity;
+        updates[`players/${id}/name`] = card.name;
+        updates[`players/${id}/inventory`] = [CODENAMES.THE_FOOL];
+    });
+
+    updates['gameState/phase'] = 'GAME';
+    updates['gameState/ritualActive'] = false;
+    db.ref().update(updates);
+}
+
+function startHostLoops() {
+    setInterval(() => {
+        if (!gameState || gameState.phase !== 'GAME') return;
+        // Lógica periódica do host (ex: drenar sanidade)
+    }, 2000);
+}
+
+function handleInvestigate() {
+    const roll = Math.random();
+    if (roll < 0.5) {
+        addLog("Você encontrou uma pista oculta.", "#00ff00", 'system');
+    } else {
+        addLog("Sua mente vacila ao olhar o abismo. (-1 Sanidade)", "#ff0000", 'combat');
+        db.ref(`players/${myId}/sanity`).transaction(s => (s || 10) - 1);
+    }
+}
 
 function addLog(text, color = null, tab = 'system') {
     const targetBox = document.getElementById(`log-box-${tab}`) || document.getElementById('log-box-system');
@@ -504,32 +527,10 @@ function renderInventory(inventory) {
         
         const img = document.createElement('img');
         // Assume que as imagens estão em assets/cards/
+        img.src = `assets/cards/${card.image}`;
         img.className = 'codename-card';
         img.alt = card.name;
         img.title = `${card.name}\n${card.desc}`; // Tooltip nativo
-
-        // Fallback: Se a imagem não existir, cria um cartão de texto
-        img.onerror = () => {
-            img.remove(); // Remove o ícone de imagem quebrada
-            const div = document.createElement('div');
-            div.className = 'codename-card'; // Mantém o estilo visual
-            div.innerText = card.name;
-            div.style.display = 'flex';
-            div.style.alignItems = 'center';
-            div.style.justifyContent = 'center';
-            div.style.fontSize = '0.7em';
-            div.style.textAlign = 'center';
-            div.style.padding = '5px';
-            div.style.color = '#d4c5a8';
-            
-            // Reatribui o clique para funcionar igual à imagem
-            div.onclick = () => {
-                useCard(card, index);
-            };
-            li.appendChild(div);
-        };
-
-        img.src = `assets/cards/${card.image}`;
 
         // Anima apenas se for o carregamento inicial ou se for uma carta nova (índice maior que o anterior)
         if (previousInventorySize === 0 || index >= previousInventorySize) {
@@ -540,7 +541,10 @@ function renderInventory(inventory) {
         }
         
         img.onclick = () => {
-            useCard(card, index);
+            if (confirm(`Deseja ativar o "${card.name}"?`)) {
+                addLog(`Você usou ${card.name}.`, "#b388eb", 'system');
+                // Remover do inventário no DB
+            }
         };
         
         li.appendChild(img);
@@ -548,117 +552,6 @@ function renderInventory(inventory) {
     });
 
     previousInventorySize = inventory.length;
-}
-
-function renderIngredients(ingredients) {
-    ingredientsList.innerHTML = '';
-    if (!ingredients || ingredients.length === 0) {
-        ingredientsList.innerHTML = '<li>(Vazio)</li>';
-        return;
-    }
-    
-    ingredients.forEach(ing => {
-        const li = document.createElement('li');
-        li.style.display = 'flex';
-        li.style.justifyContent = 'space-between';
-        li.style.alignItems = 'center';
-        li.style.marginBottom = '5px';
-
-        const span = document.createElement('span');
-        span.innerText = `- ${ing}`;
-        
-        const btnTrade = document.createElement('button');
-        btnTrade.innerText = 'Trocar';
-        btnTrade.style.fontSize = '0.7em';
-        btnTrade.style.padding = '2px 6px';
-        btnTrade.style.marginLeft = '10px';
-        btnTrade.style.background = '#2c3e50';
-        btnTrade.style.border = '1px solid #5c4b36';
-        btnTrade.style.color = '#d4c5a8';
-        btnTrade.style.cursor = 'pointer';
-
-        btnTrade.onclick = () => tradeIngredient(ing);
-        
-        li.appendChild(span);
-        li.appendChild(btnTrade);
-        ingredientsList.appendChild(li);
-    });
-}
-
-function tradeIngredient(ingredientName) {
-    if (isDead) return;
-    const name = prompt(`Para quem você deseja enviar ${ingredientName}?`);
-    if (!name) return;
-    
-    const target = currentPlayers.find(p => p.name.toLowerCase() === name.toLowerCase());
-    if (target) {
-        if (target.id === myId) return alert("Você não pode trocar consigo mesmo.");
-        socket.emit('tradeIngredient', { targetId: target.id, ingredientName });
-    } else {
-        alert("Jogador não encontrado.");
-    }
-}
-
-function useCard(card, index) {
-    let payload = { type: 'USE_CODENAME', cardIndex: index };
-
-    if (card.needsInput) {
-        const msg = prompt(`[${card.name}] Digite a mensagem para enviar:`);
-        if (!msg) return;
-        payload.message = msg;    
-    } else if (card.targetType === 'room') {
-        const roomName = prompt(`[${card.name}] Digite a sala alvo (Salão, Biblioteca, Jardim, Cozinha, Aposentos):`);
-        if (!roomName) return;
-        // Validação simples
-        const validRooms = ['Salão', 'Biblioteca', 'Jardim', 'Cozinha', 'Aposentos'];
-        const formattedRoom = validRooms.find(r => r.toLowerCase() === roomName.toLowerCase());
-        if (formattedRoom) payload.targetId = formattedRoom;
-        else { alert("Sala inválida."); return; }
-    } else if (card.needsTarget) {
-        const name = prompt(`[${card.name}] Digite o nome do alvo:`);
-        if (!name) return;
-        const target = currentPlayers.find(p => p.name.toLowerCase() === name.toLowerCase());
-        if (target) payload.targetId = target.id;
-        else { alert("Jogador não encontrado."); return; }
-    } else if (!confirm(`Deseja ativar o "${card.name}"?`)) {
-        return;
-    }
-
-    socket.emit('playerAction', payload);
-}
-
-function updateRoomUI(currentRoom) {
-    document.getElementById('current-room').innerText = currentRoom || 'Desconhecido';
-    
-    // Lista de salas disponíveis (deve bater com o servidor)
-    const rooms = ['Salão', 'Biblioteca', 'Jardim', 'Cozinha', 'Aposentos'];
-    
-    roomButtonsContainer.innerHTML = '';
-    rooms.forEach(room => {
-        const btn = document.createElement('button');
-        btn.innerText = room;
-        btn.style.fontSize = '0.8em';
-        btn.style.padding = '5px';
-        btn.style.flex = '1 0 40%'; // Botões ocupam espaço
-        
-        if (room === currentRoom) {
-            btn.disabled = true;
-            btn.style.borderColor = '#a63737';
-            btn.style.color = '#a63737';
-        } else {
-            btn.onclick = () => moveRoom(room);
-        }
-        roomButtonsContainer.appendChild(btn);
-    });
-}
-
-function updateStatsUI(sanity, spirituality) {
-    document.getElementById('my-sanity-text').innerText = sanity;
-    document.getElementById('my-spirit-text').innerText = spirituality;
-    
-    // Atualiza barras visuais
-    document.getElementById('sanity-bar').style.width = (sanity * 10) + '%';
-    document.getElementById('spirit-bar').style.width = (spirituality * 10) + '%';
 }
 
 function renderPlayerList() {
@@ -669,35 +562,12 @@ function renderPlayerList() {
     if (me && me.isDead && !isDead) {
         triggerDeath();
     }
-    
-    if (me) updateRoomUI(me.room);
-
-    renderGameWorldAvatars(); // Atualiza avatares visuais
 
     currentPlayers.forEach(p => {
         const li = document.createElement('li');
         const readyStatus = p.isReady ? " [PRONTO]" : "";
-        let displayName = p.name;
+        li.innerText = `${p.name} (Lvl ${p.level || 1})${p.id === myId ? " (Você)" : ""}${readyStatus}`;
         
-        if (p.isInverted) {
-            displayName += " (Invertido)";
-            li.style.transform = "rotate(180deg)"; // Efeito visual divertido ou apenas texto
-            li.style.color = "#ffaa00";
-        }
-        
-        // Mostra a sala onde o jogador está
-        li.innerText = `${displayName} [${p.room || '?'}]${p.id === myId ? " (Você)" : ""}${readyStatus}`;
-        
-        // Clique para Sussurrar
-        if (p.id !== myId) {
-            li.style.cursor = "pointer";
-            li.title = "Clique para sussurrar";
-            li.onclick = () => {
-                chatInput.value = `/w ${p.name} `;
-                chatInput.focus();
-            };
-        }
-
         if (p.isReady) {
             li.style.color = "#4caf50"; // Verde para indicar pronto
         }
@@ -705,20 +575,17 @@ function renderPlayerList() {
         if (p.isDead) {
             li.style.textDecoration = "line-through";
             li.style.color = "#888";
-        } else if (p.isMonster) {
-            li.style.color = "#ff00ff"; // Cor para Monstro
-            li.innerText += " [MONSTRO]";
-        } else if (isRitualActive && myRole === 'Carrasco' && p.id !== myId && !isDead) {
+        } else if (isRitualActive && myRole === 'Assassino' && p.id !== myId && !isDead) {
             // Botão de Execução do Assassino
             const btnKill = document.createElement('button');
             btnKill.innerText = "☠️";
             btnKill.className = "kill-btn";
             btnKill.title = "Executar Jogador";
             btnKill.style.marginLeft = "10px";
-            btnKill.onclick = (e) => {
-                e.stopPropagation(); // Impede que o clique no botão ative o sussurro
+            btnKill.onclick = () => {
                 if (confirm(`Deseja executar ${p.name}? Esta ação é irreversível.`)) {
-                    socket.emit('playerAction', { type: 'RITUAL_EXECUTE', targetId: p.id });
+                    db.ref(`players/${p.id}/isDead`).set(true);
+                    addLog(`Você executou ${p.name}.`, "#ff0000", 'combat');
                 }
             };
             li.appendChild(btnKill);
@@ -731,30 +598,8 @@ function renderPlayerList() {
     const btnReady = document.getElementById('btn-ready');
     if (me && btnReady) {
         btnReady.innerText = me.isReady ? "Cancelar" : "Estou Pronto";
-        btnReady.style.borderColor = me.isReady ? "#ff4444" : "#4caf50";
-        btnReady.style.color = me.isReady ? "#ff4444" : "#d4c5a8";
+        btnReady.style.borderColor = me.isReady ? "#4caf50" : "#5c4b36";
     }
-}
-
-function renderGameWorldAvatars() {
-    // Limpa avatares antigos que não estão mais na lista ou mudaram de sala
-    // (Simplificação: recria todos. Em produção, faríamos diff)
-    gameWorld.innerHTML = '';
-    
-    const me = currentPlayers.find(p => p.id === myId);
-    if (!me) return;
-
-    currentPlayers.forEach(p => {
-        if (p.room === me.room && !p.isDead) {
-            const div = document.createElement('div');
-            div.id = `avatar-${p.id}`;
-            div.className = 'player-avatar';
-            div.style.left = (p.x || 400) + 'px';
-            div.style.top = (p.y || 300) + 'px';
-            if (p.id === myId) div.style.border = '2px solid #4caf50';
-            gameWorld.appendChild(div);
-        }
-    });
 }
 
 function renderAbilities() {
@@ -764,26 +609,24 @@ function renderAbilities() {
 
     // Definição local para renderização (deve bater com o servidor)
     const ABILITIES_UI = {
-        Carrasco: {
-            10: { id: 'SECRET_PASSAGE', name: 'Passagem Secreta', cost: 1, targetType: 'room' },
-            9: { id: 'SILENT_KILL', name: 'Abate Silencioso', cost: 3, target: true },
-            8: { id: 'SABOTAGE', name: 'Sabotagem', cost: 2, targetType: 'room' }
+        Detetive: {
+            2: { id: 'ANALYZE', name: 'Analisar Aura', cost: 2, target: true },
+            3: { id: 'TRUTH', name: 'Visão da Verdade', cost: 5, target: true }
         },
-        Vidente: {
-            9: { id: 'AUSPEX', name: 'Auspício', cost: 2, target: false }
+        Ocultista: {
+            2: { id: 'HEAL', name: 'Restaurar Mente', cost: 1, target: true },
+            3: { id: 'BLAST', name: 'Sussurro do Caos', cost: 3, target: true }
         },
-        Observador: {
-            9: { id: 'DETAIL_VISION', name: 'Visão de Detalhes', cost: 1, target: false }
-        },
-        Poeta: {
-            9: { id: 'SOOTHE', name: 'Acalento', cost: 1, target: true }
+        Assassino: {
+            2: { id: 'TERROR', name: 'Semear Terror', cost: 0, target: true },
+            3: { id: 'SABOTAGE', name: 'Sabotagem', cost: 0, target: false }
         }
     };
 
     const myAbilities = ABILITIES_UI[me.role];
     if (!myAbilities) return;
 
-    for (let lvl = 10; lvl >= (me.level !== undefined ? me.level : 9); lvl--) {
+    for (let lvl = 2; lvl <= (me.level || 1); lvl++) {
         if (myAbilities[lvl]) {
             const ab = myAbilities[lvl];
             const btn = document.createElement('button');
@@ -804,34 +647,12 @@ function renderAbilities() {
                 btn.innerText = `${ab.name} (Custo: ${ab.cost})`;
                 btn.style.borderColor = "#b388eb"; // Cor mística
                 btn.style.color = "#e0d0f5";
-                btn.onclick = () => useAbility({ ...ab, needsTarget: ab.target || ab.targetType }, 0); // Adaptando para usar a mesma função de cartas ou criar nova
+                btn.onclick = () => addLog(`Habilidade ${ab.name} usada.`, "#b388eb", 'combat');
             }
             
             abilityContainer.appendChild(btn);
         }
     }
-}
-
-// Função auxiliar para usar habilidades (adaptada de useCard ou nova)
-function useAbility(ability, index) {
-    let payload = { type: 'USE_ABILITY', abilityId: ability.id };
-
-    if (ability.targetType === 'room') {
-        const roomName = prompt(`[${ability.name}] Digite a sala alvo (Salão, Biblioteca, Jardim, Cozinha, Aposentos):`);
-        if (!roomName) return;
-        const validRooms = ['Salão', 'Biblioteca', 'Jardim', 'Cozinha', 'Aposentos'];
-        const formattedRoom = validRooms.find(r => r.toLowerCase() === roomName.toLowerCase());
-        if (formattedRoom) payload.targetId = formattedRoom;
-        else { alert("Sala inválida."); return; }
-    } else if (ability.needsTarget) {
-        const name = prompt(`[${ability.name}] Digite o nome do alvo:`);
-        if (!name) return;
-        const target = currentPlayers.find(p => p.name.toLowerCase() === name.toLowerCase());
-        if (target) payload.targetId = target.id;
-        else { alert("Jogador não encontrado."); return; }
-    }
-
-    socket.emit('playerAction', payload);
 }
 
 // Atualiza a UI das habilidades a cada segundo para mostrar a contagem regressiva
@@ -873,76 +694,3 @@ function renderClues(clues) {
         cluesList.appendChild(li);
     });
 }
-
-// --- LÓGICA DE MOVIMENTO E VISÃO ---
-
-function toggleSpiritVision(active) {
-    spiritVisionActive = active;
-    if (active) {
-        spiritVisionOverlay.style.display = 'block';
-        btnSpiritVision.classList.add('active');
-    } else {
-        spiritVisionOverlay.style.display = 'none';
-        btnSpiritVision.classList.remove('active');
-    }
-    socket.emit('toggleSpiritVision', active);
-}
-
-// Input de Teclado (WASD)
-const keys = {};
-document.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
-document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
-
-function startMovementLoop() {
-    if (movementInterval) clearInterval(movementInterval);
-    movementInterval = setInterval(() => {
-        let dx = 0;
-        let dy = 0;
-        const speed = 5;
-
-        if (keys['w'] || keys['arrowup']) dy -= speed;
-        if (keys['s'] || keys['arrowdown']) dy += speed;
-        if (keys['a'] || keys['arrowleft']) dx -= speed;
-        if (keys['d'] || keys['arrowright']) dx += speed;
-
-        // Joystick Virtual
-        if (moveVector.x !== 0 || moveVector.y !== 0) {
-            dx += moveVector.x * speed;
-            dy += moveVector.y * speed;
-        }
-
-        if (dx !== 0 || dy !== 0) {
-            socket.emit('playerMove', { dx, dy });
-        }
-    }, 50); // 20 FPS
-}
-
-function stopMovementLoop() {
-    if (movementInterval) clearInterval(movementInterval);
-}
-
-// Lógica do Joystick Mobile
-const joystickArea = document.getElementById('joystick-area');
-const joystickKnob = document.getElementById('joystick-knob');
-
-joystickArea.addEventListener('touchmove', (e) => {
-    e.preventDefault();
-    const touch = e.targetTouches[0];
-    const rect = joystickArea.getBoundingClientRect();
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    const x = touch.clientX - rect.left - centerX;
-    const y = touch.clientY - rect.top - centerY;
-    
-    // Normaliza vetor (-1 a 1)
-    moveVector.x = Math.max(-1, Math.min(1, x / 40));
-    moveVector.y = Math.max(-1, Math.min(1, y / 40));
-    
-    // Move visualmente o knob
-    joystickKnob.style.transform = `translate(${moveVector.x * 20}px, ${moveVector.y * 20}px)`;
-});
-
-joystickArea.addEventListener('touchend', () => {
-    moveVector = { x: 0, y: 0 };
-    joystickKnob.style.transform = `translate(0px, 0px)`;
-});
