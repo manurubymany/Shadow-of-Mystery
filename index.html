@@ -143,11 +143,32 @@
 
                 <p><em>Descubra o assassino e vote nele antes que seja tarde.</em></p>
             </div>
-            <button id="btn-close-tutorial">Entendi, aceito meu destino.</button>
+           <button id="btn-close-tutorial">Entendi, aceito meu destino.</button>
         </div>
-    </div>
+    </div> <script src="/socket.io/socket.io.js"></script>
 
-    <script src="/socket.io/socket.io.js"></script>
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+      import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+      const firebaseConfig = {
+        apiKey: "SUA_API_KEY", // Não esqueça de trocar pela sua chave real!
+        authDomain: "shadow-of-mystery.firebaseapp.com",
+        databaseURL: "https://shadow-of-mystery-default-rtdb.firebaseio.com",
+        projectId: "shadow-of-mystery",
+        storageBucket: "shadow-of-mystery.appspot.com",
+        messagingSenderId: "SEU_ID",
+        appId: "SEU_ID_APP"
+      };
+
+      const app = initializeApp(firebaseConfig);
+      
+      window.fbAuth = getAuth(app);
+      window.fbDb = getDatabase(app);
+      window.fbMethods = { signInWithEmailAndPassword, ref, set, get };
+    </script>
+
     <script src="client.js"></script>
 </body>
 </html>
