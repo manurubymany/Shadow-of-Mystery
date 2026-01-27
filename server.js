@@ -7,8 +7,8 @@ const server = http.createServer(app);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Garante que o index.html seja servido na rota raiz
-app.get('/', (req, res) => {
+// Redireciona qualquer acesso para o index.html (Correção para Deploy)
+app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
