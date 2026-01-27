@@ -84,23 +84,61 @@ let myRole = null;
 let isRitualActive = false;
 let currentPlayers = [];
 let previousInventorySize = 0;
+let gameState = null;
+let isHost = false; // Determina se este cliente processa as regras do jogo
+
+// --- CONSTANTES DO JOGO (Lógica Local) ---
+const PATHWAYS = {
+    DEATH: { name: 'Caminho da Morte', role: 'Carrasco', baseSanity: 6 },
+    SEER: { name: 'Caminho do Vidente', role: 'Vidente', baseSanity: 8 },
+    SPECTATOR: { name: 'Caminho do Observador', role: 'Observador', baseSanity: 7 },
+    POET: { name: 'Caminho do Poeta', role: 'Poeta', baseSanity: 9 }
+};
+const CODENAMES = {
+    DEATH: { id: 'DEATH', name: 'A Morte', desc: 'Impede análise de pistas.', image: 'death.png', pathway: 'Carrasco' },
+    THE_DEVIL: { id: 'THE_DEVIL', name: 'O Diabo', desc: 'Causa caos.', image: 'the_devil.png', pathway: 'Carrasco' },
+    THE_TOWER: { id: 'THE_TOWER', name: 'A Torre', desc: 'Destruição.', image: 'the_tower.png', pathway: 'Carrasco' },
+    THE_MAGICIAN: { id: 'THE_MAGICIAN', name: 'O Mago', desc: 'Copia carta.', image: 'the_magician.png', pathway: 'Vidente' },
+    HIGH_PRIESTESS: { id: 'HIGH_PRIESTESS', name: 'A Papisa', desc: 'Revela item.', image: 'high_priestess.png', needsTarget: true, pathway: 'Vidente' },
+    JUDGEMENT: { id: 'JUDGEMENT', name: 'O Julgamento', desc: 'Revela verdade.', image: 'judgement.png', pathway: 'Vidente' },
+    THE_HERMIT: { id: 'THE_HERMIT', name: 'O Eremita', desc: 'Ilumina.', image: 'the_hermit.png', pathway: 'Observador' },
+    THE_MOON: { id: 'THE_MOON', name: 'A Lua', desc: 'Alucinação.', image: 'the_moon.png', pathway: 'Observador' },
+    THE_STAR: { id: 'THE_STAR', name: 'A Estrela', desc: 'Esperança.', image: 'the_star.png', pathway: 'Observador' },
+    THE_SUN: { id: 'THE_SUN', name: 'O Sol', desc: 'Vitalidade.', image: 'the_sun.png', pathway: 'Poeta' },
+    THE_EMPRESS: { id: 'THE_EMPRESS', name: 'A Imperatriz', desc: 'Criação.', image: 'the_empress.png', pathway: 'Poeta' },
+    THE_WORLD: { id: 'THE_WORLD', name: 'O Mundo', desc: 'Sela Ruínas.', image: 'the_world.png', pathway: 'Poeta' },
+    THE_FOOL: { id: 'THE_FOOL', name: 'O Louco', desc: 'Enganação.', image: 'the_fool.png', needsInput: true, pathway: 'Especial' },
+    HANGED_MAN: { id: 'HANGED_MAN', name: 'O Pendurado', desc: 'Proteção.', image: 'hanged_man.png', needsTarget: true, pathway: 'Especial' }
+};
 
 // --- EVENTOS DE UI ---
 
 document.getElementById('btn-join').onclick = () => {
     const name = document.getElementById('username').value;
     const password = document.getElementById('password').value;
+    
+    if (password !== "12345") {
+        alert("Senha incorreta.");
+        return;
+    }
+
     if (name) {
-        socket.emit('joinGame', { name, password });
+        joinGameFirebase(name);
     }
 };
 
 document.getElementById('btn-ready').onclick = () => {
-    socket.emit('toggleReady');
+    if (!myId) return;
+    db.ref('players/' + myId + '/isReady').transaction(val => !val);
 };
 
 document.getElementById('btn-add-bot').onclick = () => {
-    socket.emit('addBot');
+    const botId = 'bot_' + Date.now() + Math.random().toString(36).substr(2, 5);
+    const botName = `Sombra ${Math.floor(Math.random() * 100)}`;
+    const botData = createPlayerObject(botId, botName);
+    botData.isBot = true;
+    botData.isReady = true;
+    db.ref('players/' + botId).set(botData);
 };
 
 document.getElementById('btn-leave').onclick = () => {
@@ -159,18 +197,21 @@ function sendLobbyChat() {
 
 window.sendAction = (type) => {
     if (isDead) return;
-    socket.emit('playerAction', { type: type });
+    // Ações genéricas (ex: Investigar)
+    if (type === 'INVESTIGATE_OCCULT') handleInvestigate();
 };
 
 window.startVoting = () => {
     if (isDead) return;
-    socket.emit('startVoting');
+    db.ref('gameState').update({ phase: 'VOTING', votes: {} });
+    addLog("O Julgamento começou.", "#a63737", 'system');
 };
 
 window.confirmSacrifice = () => {
     if (isDead) return;
     if (confirm("VOCÊ ESTÁ PRESTES A SE SACRIFICAR.\n\nIsso causará sua morte permanente, mas restaurará a sanidade dos seus aliados.\n\nDeseja realmente fazer isso?")) {
-        socket.emit('playerAction', { type: 'SACRIFICE' });
+        db.ref('players/' + myId).update({ isDead: true });
+        addLog("Você se sacrificou pelo grupo.", "#ff0000", 'combat');
     }
 };
 
@@ -213,23 +254,114 @@ window.switchTab = (tabName) => {
     activeBox.style.display = 'block';
 };
 
-// --- EVENTOS DO SOCKET ---
+// --- LÓGICA FIREBASE ---
 
-socket.on('connect', () => {
-    document.getElementById('status-display').innerText = "Conectado ao Servidor";
-    
+function initFirebaseListeners() {
+    document.getElementById('status-display').innerText = "Conectado ao Véu (Firebase)";
+
     // Tenta reconectar se houver sessão salva
     const storedId = localStorage.getItem('vc_playerId');
     if (storedId) {
-        socket.emit('reconnectGame', storedId);
+        db.ref('players/' + storedId).once('value').then(snap => {
+            if (snap.exists()) {
+                myId = storedId;
+                onJoinSuccess();
+            } else {
+                localStorage.removeItem('vc_playerId');
+            }
+        });
     }
-});
 
-socket.on('joinSuccess', (playerId) => {
+    // Listener de Jogadores
+    db.ref('players').on('value', (snapshot) => {
+        const val = snapshot.val();
+        currentPlayers = val ? Object.values(val) : [];
+        
+        // Verifica Host (o jogador mais antigo/primeiro da lista assume a lógica)
+        if (currentPlayers.length > 0) {
+            const sorted = currentPlayers.sort((a, b) => a.id.localeCompare(b.id));
+            if (sorted[0].id === myId && !isHost) {
+                isHost = true;
+                console.log("Você é o Host da sessão.");
+                startHostLoops();
+            }
+        }
+
+        renderPlayerList();
+        renderAbilities();
+        
+        const me = currentPlayers.find(p => p.id === myId);
+        if (me) {
+            if (me.isDead && !isDead) triggerDeath();
+            document.getElementById('my-sanity').innerText = me.sanity;
+            document.getElementById('my-level').innerText = me.level || 1;
+            renderInventory(me.inventory);
+            renderClues(me.clues || []);
+            if (me.diary && diaryText.value === "") diaryText.value = me.diary;
+        }
+    });
+
+    // Listener de Estado do Jogo
+    db.ref('gameState').on('value', (snapshot) => {
+        const state = snapshot.val();
+        if (!state) return;
+        gameState = state;
+
+        if (state.phase === 'GAME' && lobbyScreen.style.display !== 'none') {
+            onGameStarted();
+        }
+        
+        if (state.phase === 'VOTING' && votingOverlay.style.display === 'none') {
+            startVotingUI();
+        } else if (state.phase !== 'VOTING') {
+            votingOverlay.style.display = 'none';
+        }
+
+        if (state.ritualActive && !isRitualActive) {
+            document.body.classList.add('ritual-mode');
+            isRitualActive = true;
+            startBloodRain();
+            addLog("O RITUAL COMEÇOU!", "#ff0000", 'system');
+        }
+    });
+
+    // Listener de Chat
+    db.ref('messages').limitToLast(10).on('child_added', (snapshot) => {
+        const msg = snapshot.val();
+        addLog(`${msg.sender}: ${msg.text}`, null, 'chat');
+        if (lobbyScreen.style.display !== 'none' && lobbyChatLog) {
+            const p = document.createElement('p');
+            p.innerText = `${msg.sender}: ${msg.text}`;
+            lobbyChatLog.appendChild(p);
+            lobbyChatLog.scrollTop = lobbyChatLog.scrollHeight;
+        }
+    });
+}
+
+initFirebaseListeners();
+
+function joinGameFirebase(name) {
+    const playerId = 'player_' + Date.now() + Math.random().toString(36).substr(2, 5);
+    const playerData = createPlayerObject(playerId, name);
+    
+    db.ref('players/' + playerId).set(playerData).then(() => {
+        myId = playerId;
+        localStorage.setItem('vc_playerId', playerId);
+        onJoinSuccess();
+    });
+}
+
+function createPlayerObject(id, name) {
+    return {
+        id: id, name: name, room: 'Salão', x: 400, y: 300,
+        sanity: 10, isReady: false, isDead: false,
+        role: 'Desconhecido', pathway: '???', inventory: [], clues: [], diary: ""
+    };
+}
+
+function onJoinSuccess() {
     sfxWind.pause(); // Para o som do vento ao entrar
     bgmMenu.pause(); // Para a música do menu
-    myId = playerId;
-    localStorage.setItem('vc_playerId', playerId);
     
     // Se for um novo login (não reconexão automática que já trata UI), mostra o lobby
     if (loginScreen.style.display !== 'none' && gameScreen.style.display === 'none') {
@@ -237,40 +369,16 @@ socket.on('joinSuccess', (playerId) => {
         lobbyScreen.style.display = 'block';
         tutorialOverlay.style.display = 'flex'; // Abre o tutorial ao entrar
     }
-});
+}
 
-socket.on('errorMsg', (msg) => {
-    alert(msg);
-});
-
-socket.on('forceClearSession', () => {
-    localStorage.removeItem('vc_playerId');
-    // Opcional: alert("Sessão expirada.");
-    location.reload();
-});
-
-socket.on('updatePlayerList', (players) => {
-    currentPlayers = players;
-    renderPlayerList();
-    renderAbilities(); // Atualiza habilidades se o nível mudou
-});
-
-socket.on('reconnectUI', (phase) => {
-    if (phase === 'LOBBY') {
-        loginScreen.style.display = 'none';
-        lobbyScreen.style.display = 'block';
-        // Opcional: tutorialOverlay.style.display = 'flex'; // Se quiser mostrar na reconexão também
-    }
-});
-
-socket.on('gameStarted', (gameState) => {
+function onGameStarted() {
     if (lobbyChatLog) lobbyChatLog.innerHTML = '';
     if (lobbyChatInput) lobbyChatInput.value = '';
     lobbyScreen.style.display = 'none';
     gameScreen.style.display = 'block';
     
     // Identificar meu personagem
-    const me = gameState.players[myId];
+    const me = currentPlayers.find(p => p.id === myId);
     if (me) {
         myRole = me.role;
         document.getElementById('my-role').innerText = "Caminho: " + me.pathway;
@@ -288,90 +396,32 @@ socket.on('gameStarted', (gameState) => {
         // Iniciar música ambiente (pode exigir interação do usuário dependendo do navegador)
         bgmAmbient.play().catch(e => console.log("Áudio bloqueado pelo navegador. Interaja com a página."));
 
-        if (gameState.ritualActive) {
+        if (gameState && gameState.ritualActive) {
             document.body.classList.add('ritual-mode');
             isRitualActive = true;
             startBloodRain();
             renderPlayerList();
         }
     }
-});
+}
 
-socket.on('playerJoinedLobby', () => {
-    // O servidor já envia uma mensagem de log via 'actionResult'.
-    // Apenas tocamos o som para evitar duplicidade de mensagens.
-    sfxJoin.play().catch(() => {});
-});
+function sendChatMessage(text) {
+    const me = currentPlayers.find(p => p.id === myId);
+    const name = me ? me.name : "Desconhecido";
+    db.ref('messages').push({ sender: name, text: text, timestamp: Date.now() });
+}
 
-socket.on('playerLeftLobby', () => {
-    sfxLeave.play().catch(() => {});
-});
-
-socket.on('actionResult', (data) => {
-    // Suporta tanto string antiga quanto objeto novo { text, tab }
-    if (typeof data === 'string') {
-        addLog(data, null, 'system');
-    } else {
-        addLog(data.text, null, data.tab || 'system');
-    }
-});
-
-socket.on('sanityEffect', (effect) => {
-    if (effect.type === 'HALLUCINATION') {
-        document.body.style.filter = "sepia(100%) hue-rotate(90deg) blur(1px)";
-        setTimeout(() => {
-            document.body.style.filter = "none";
-        }, 3000);
-        addLog("Sua mente vacila...", '#ff6b6b', 'combat');
-    }
-});
-
-socket.on('chatMessage', (data) => {
-    // data = { sender: 'Nome', text: 'msg', type: 'global'|'private'|'occult' }
-    let color = '#d4c5a8';
-    let prefix = '[Global]';
-
-    if (data.type === 'private') {
-        color = '#ff6b6b';
-        prefix = '[Sussurro]';
-        sfxWhisper.play().catch(() => {});
-    } else if (data.type === 'occult') {
-        color = '#b388eb'; // Roxo místico
-        prefix = '[Sombra]';
-        sfxWhisper.play().catch(() => {});
-    }
-
-    addLog(`${prefix} ${data.sender}: ${data.text}`, color, 'chat');
-
-    // Adiciona ao chat do Lobby se estiver visível
-    if (lobbyScreen.style.display !== 'none' && lobbyChatLog) {
-        const p = document.createElement('p');
-        p.innerText = `${data.sender}: ${data.text}`;
-        p.style.color = color;
-        lobbyChatLog.appendChild(p);
-        lobbyChatLog.scrollTop = lobbyChatLog.scrollHeight;
-    }
-});
-
-socket.on('hintMessage', (msg) => {
-    addLog(`[PISTA] ${msg}`, '#00ff00', 'system'); // Verde brilhante para pistas
-});
-
-socket.on('updateClues', (clues) => {
-    renderClues(clues);
-});
-
-socket.on('votingStarted', (players) => {
+function startVotingUI() {
     votingOverlay.style.display = 'flex';
     votingCandidates.innerHTML = '';
 
-    players.forEach(p => {
+    currentPlayers.forEach(p => {
         if (!p.isDead) {
             const btn = document.createElement('button');
             btn.className = 'vote-btn';
             btn.innerText = `Condenar ${p.name}`;
             btn.onclick = () => {
-                socket.emit('castVote', p.id);
+                db.ref('gameState/votes/' + myId).set(p.id);
                 votingCandidates.innerHTML = '<p>Voto registrado. Aguardando veredito...</p>';
             };
             votingCandidates.appendChild(btn);
@@ -380,45 +430,59 @@ socket.on('votingStarted', (players) => {
 
     addLog("--- O JULGAMENTO COMEÇOU ---", "#a63737", 'system');
     sfxVote.play().catch(() => {});
-});
+}
 
-socket.on('votingEnded', () => {
-    votingOverlay.style.display = 'none';
-});
+// --- LÓGICA DO HOST (SERVERLESS) ---
 
-socket.on('ritualStart', () => {
-    document.body.classList.add('ritual-mode');
-    isRitualActive = true;
-    sfxRitual.play().catch(() => {});
-    addLog("O CÉU SE TORNA SANGUE. O RITUAL ESTÁ ENTRE NÓS.", "#ff0000", 'system');
-    startBloodRain();
-    renderPlayerList();
-});
+function startGameLogic() {
+    if (currentPlayers.length < 1) {
+        alert("Precisa de pelo menos 1 jogador.");
+        return;
+    }
 
-socket.on('gameOver', (data) => {
-    // data = { winner: string, reason: string, players: object }
-    document.body.classList.remove('dead-mode'); // Remove filtro cinza se estiver morto
-    document.body.classList.remove('ritual-mode');
-    
-    lobbyScreen.style.display = 'none';
-    gameScreen.style.display = 'none';
-    votingOverlay.style.display = 'none';
-    document.getElementById('death-overlay').style.display = 'none';
-    document.getElementById('blood-rain-container').style.display = 'none';
-    gameOverScreen.style.display = 'flex';
+    const playerIds = currentPlayers.map(p => p.id);
+    // Embaralha
+    for (let i = playerIds.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [playerIds[i], playerIds[j]] = [playerIds[j], playerIds[i]];
+    }
 
-    winnerDisplay.innerText = `VENCEDOR: ${data.winner.toUpperCase()}`;
-    document.getElementById('win-reason').innerText = data.reason;
+    const updates = {};
+    playerIds.forEach((id, index) => {
+        const roles = [PATHWAYS.DEATH, PATHWAYS.SEER, PATHWAYS.SPECTATOR, PATHWAYS.POET];
+        const assigned = roles[index % roles.length];
+        
+        const availableCards = Object.values(CODENAMES).filter(c => c.pathway === assigned.role || c.pathway === 'Especial');
+        const card = availableCards[Math.floor(Math.random() * availableCards.length)];
 
-    revealList.innerHTML = '';
-    Object.values(data.players).forEach(p => {
-        const li = document.createElement('li');
-        const status = p.isDead ? " (MORTO)" : " (VIVO)";
-        li.innerText = `${p.name} - ${p.role} [${p.pathway}]${status}`;
-        if (p.role === 'Assassino') li.style.color = '#ff4444';
-        revealList.appendChild(li);
+        updates[`players/${id}/role`] = assigned.role;
+        updates[`players/${id}/pathway`] = assigned.name;
+        updates[`players/${id}/sanity`] = assigned.baseSanity;
+        updates[`players/${id}/name`] = card.name;
+        updates[`players/${id}/inventory`] = [CODENAMES.THE_FOOL];
     });
-});
+
+    updates['gameState/phase'] = 'GAME';
+    updates['gameState/ritualActive'] = false;
+    db.ref().update(updates);
+}
+
+function startHostLoops() {
+    setInterval(() => {
+        if (!gameState || gameState.phase !== 'GAME') return;
+        // Lógica periódica do host (ex: drenar sanidade)
+    }, 2000);
+}
+
+function handleInvestigate() {
+    const roll = Math.random();
+    if (roll < 0.5) {
+        addLog("Você encontrou uma pista oculta.", "#00ff00", 'system');
+    } else {
+        addLog("Sua mente vacila ao olhar o abismo. (-1 Sanidade)", "#ff0000", 'combat');
+        db.ref(`players/${myId}/sanity`).transaction(s => (s || 10) - 1);
+    }
+}
 
 function addLog(text, color = null, tab = 'system') {
     const targetBox = document.getElementById(`log-box-${tab}`) || document.getElementById('log-box-system');
@@ -478,7 +542,8 @@ function renderInventory(inventory) {
         
         img.onclick = () => {
             if (confirm(`Deseja ativar o "${card.name}"?`)) {
-                socket.emit('playerAction', { type: 'USE_CODENAME', cardIndex: index });
+                addLog(`Você usou ${card.name}.`, "#b388eb", 'system');
+                // Remover do inventário no DB
             }
         };
         
@@ -519,7 +584,8 @@ function renderPlayerList() {
             btnKill.style.marginLeft = "10px";
             btnKill.onclick = () => {
                 if (confirm(`Deseja executar ${p.name}? Esta ação é irreversível.`)) {
-                    socket.emit('playerAction', { type: 'RITUAL_EXECUTE', targetId: p.id });
+                    db.ref(`players/${p.id}/isDead`).set(true);
+                    addLog(`Você executou ${p.name}.`, "#ff0000", 'combat');
                 }
             };
             li.appendChild(btnKill);
@@ -581,7 +647,7 @@ function renderAbilities() {
                 btn.innerText = `${ab.name} (Custo: ${ab.cost})`;
                 btn.style.borderColor = "#b388eb"; // Cor mística
                 btn.style.color = "#e0d0f5";
-                btn.onclick = () => useAbility(ab.id, ab.target, ab.name);
+                btn.onclick = () => addLog(`Habilidade ${ab.name} usada.`, "#b388eb", 'combat');
             }
             
             abilityContainer.appendChild(btn);
