@@ -10,7 +10,7 @@ const bgmAmbient = new Audio('assets/audio/ambient_loop.mp3');
 bgmAmbient.loop = true;
 bgmAmbient.volume = 0.3;
 
-const sfxVote = new Audio('assets/audio/bell_toll.mp3'); // Sino do Julgamento
+const sfxVote = new Audio('assets/audio/bell_toll.mp3'); 
 const sfxDeath = new Audio('assets/audio/death_impact.mp3');
 const sfxRitual = new Audio('assets/audio/ritual_alarm.mp3');
 const sfxJoin = new Audio('assets/audio/door_open.mp3');
@@ -66,7 +66,7 @@ function onJoinSuccess() {
     sfxJoin.play().catch(() => {});
 }
 
-// --- LOGS TEMÁTICOS (ESTILO BLASPHEMOUS) ---
+// --- LOGS TEMÁTICOS ---
 function addLog(text, color = null, tab = 'system') {
     const targetBox = document.getElementById(`log-box-${tab}`);
     if (!targetBox) return;
@@ -74,7 +74,6 @@ function addLog(text, color = null, tab = 'system') {
     const p = document.createElement('p');
     p.innerHTML = `<span style="color: var(--gold-dim)">[†]</span> ${text}`;
     
-    // Cores baseadas na paleta do CSS
     if (color) p.style.color = color;
     else if (tab === 'combat') p.style.color = 'var(--blood-bright)';
     else if (tab === 'system') p.style.color = 'var(--gold)';
@@ -83,12 +82,11 @@ function addLog(text, color = null, tab = 'system') {
     targetBox.scrollTop = targetBox.scrollHeight;
 }
 
-// --- SINCRONIZAÇÃO COM FIREBASE ---
+// --- SINCRONIZAÇÃO E LÓGICA DE VITÓRIA ---
 db.ref('players').on('value', (snapshot) => {
     const val = snapshot.val();
     currentPlayers = val ? Object.values(val) : [];
     
-    // Lógica de Host
     if (currentPlayers.length > 0) {
         const sorted = currentPlayers.sort((a, b) => a.id.localeCompare(b.id));
         if (sorted[0].id === myId && !isHost) {
@@ -97,69 +95,93 @@ db.ref('players').on('value', (snapshot) => {
         }
     }
 
-    renderPlayerList();
+    // VERIFICAÇÃO DE VITÓRIA (Se o Assassino/Carrasco morreu)
+    const assassin = currentPlayers.find(p => p.role === 'Carrasco' || p.pathway === 'Caminho da Morte');
+    if (assassin && assassin.isDead && gameState?.phase === 'GAME') {
+        db.ref('gameState').update({ phase: 'GAME_OVER', winner: 'INNOCENTS' });
+    }
     
     const me = currentPlayers.find(p => p.id === myId);
     if (me) {
         if (me.isDead && !isDead) triggerDeath();
-        
-        // Atualiza Barras Visuais (As novas barras do CSS)
         const sanityBar = document.getElementById('sanity-bar');
         if (sanityBar) sanityBar.style.width = (me.sanity * 10) + "%";
-        
-        const sanityBarMini = document.getElementById('sanity-bar-mini');
-        if (sanityBarMini) sanityBarMini.style.width = (me.sanity * 10) + "%";
-        
         document.getElementById('my-level').innerText = me.level || 1;
         document.getElementById('my-role').innerText = "Caminho: " + me.pathway;
     }
 });
 
-// --- SISTEMA DE MORTE (EXCOMUNGADO) ---
-function triggerDeath() {
-    isDead = true;
-    document.body.classList.add('dead-mode');
-    const deathOverlay = document.getElementById('death-overlay');
-    deathOverlay.style.display = 'flex';
-    
-    // Altera o título para o estilo Blasphemous
-    deathOverlay.innerHTML = `<h1 class="death-title">EXCOMUNGADO</h1><p>Sua penitência acabou.</p>`;
-    
-    sfxDeath.play().catch(() => {});
-    bgmAmbient.volume = 0.1;
-    addLog("Sua alma foi separada do corpo. Você agora é apenas um eco.", "var(--blood)", 'combat');
-}
+// --- REINICIAR O JOGO ---
+window.resetGame = () => {
+    if (!isHost) {
+        alert("Apenas o Custódio (Host) pode reiniciar a penitência.");
+        return;
+    }
 
-// --- RITUAL E EFEITOS ---
+    const updates = {};
+    updates['gameState/phase'] = 'GAME'; // Ou 'LOBBY' se preferir voltar ao início
+    updates['gameState/ritualActive'] = false;
+    updates['gameState/winner'] = null;
+    
+    currentPlayers.forEach(p => {
+        updates[`players/${p.id}/isDead`] = false;
+        updates[`players/${p.id}/sanity`] = 10;
+        updates[`players/${p.id}/isReady`] = false;
+    });
+
+    db.ref().update(updates).then(() => {
+        addLog("O Milagre redefinindo o tempo... A penitência recomeça.", "var(--gold)");
+        document.getElementById('game-over-screen').style.display = 'none';
+        if (isDead) {
+            isDead = false;
+            document.body.classList.remove('dead-mode');
+            document.getElementById('death-overlay').style.display = 'none';
+        }
+    });
+};
+
+// --- GAME OVER SCREEN ---
 db.ref('gameState').on('value', (snapshot) => {
     const state = snapshot.val();
     if (!state) return;
     gameState = state;
 
+    if (state.phase === 'GAME_OVER') {
+        const screen = document.getElementById('game-over-screen');
+        const display = document.getElementById('winner-display');
+        screen.style.display = 'flex';
+        
+        if (state.winner === 'INNOCENTS') {
+            display.innerText = "VOCÊS VENCERAM AS TREVAS";
+            display.className = "gold-text-giant";
+        } else {
+            display.innerText = "AS TREVAS CONSUMIRAM TUDO";
+            display.style.color = "var(--blood)";
+        }
+    }
+
     if (state.ritualActive && !isRitualActive) {
         isRitualActive = true;
         document.body.classList.add('ritual-mode');
         sfxRitual.play().catch(() => {});
-        startBloodRain(); // Função que você já tem para criar as gotas
-        addLog("O MILAGRE DOLOROSO SE MANIFESTA: O RITUAL COMEÇOU!", "var(--blood-bright)", 'system');
+        addLog("O RITUAL COMEÇOU!", "var(--blood-bright)", 'system');
     }
 });
 
-// --- INTERFACE DE VOTAÇÃO (TRIBUNAL) ---
+function triggerDeath() {
+    isDead = true;
+    document.body.classList.add('dead-mode');
+    const deathOverlay = document.getElementById('death-overlay');
+    deathOverlay.style.display = 'flex';
+    sfxDeath.play().catch(() => {});
+}
+
 window.startVoting = () => {
     if (isDead) return;
-    db.ref('gameState').update({ phase: 'VOTING', votes: {} });
+    db.ref('gameState').update({ phase: 'VOTING' });
     sfxVote.play().catch(() => {});
 };
 
-// Funções de Diário e Pistas (Mantendo sua lógica original)
-window.openDiary = () => { document.getElementById('diary-overlay').style.display = 'flex'; };
-window.closeDiary = () => { 
-    document.getElementById('diary-overlay').style.display = 'none'; 
-    db.ref('players/' + myId).update({ diary: document.getElementById('diary-text').value });
-};
-
-// Iniciar áudio de menu ao primeiro clique
 document.addEventListener('click', () => {
     if (!myId) bgmMenu.play().catch(() => {});
 }, { once: true });
