@@ -101,14 +101,16 @@ db.ref('players').on('value', (snapshot) => {
         db.ref('gameState').update({ phase: 'GAME_OVER', winner: 'INNOCENTS' });
     }
     
-    const me = currentPlayers.find(p => p.id === myId);
-    if (me) {
-        if (me.isDead && !isDead) triggerDeath();
-        const sanityBar = document.getElementById('sanity-bar');
-        if (sanityBar) sanityBar.style.width = (me.sanity * 10) + "%";
-        document.getElementById('my-level').innerText = me.level || 1;
-        document.getElementById('my-role').innerText = "Caminho: " + me.pathway;
-    }
+// Dentro do db.ref('players').on('value'...)
+const me = currentPlayers.find(p => p.id === myId);
+if (me) {
+    const sBar = document.getElementById('sanity-bar');
+    const sBarMini = document.getElementById('sanity-bar-mini');
+    
+    // Só atualiza se o elemento realmente existir na tela atual
+    if (sBar) sBar.style.width = (me.sanity * 10) + "%";
+    if (sBarMini) sBarMini.style.width = (me.sanity * 10) + "%";
+}
 });
 
 // --- REINICIAR O JOGO ---
@@ -185,3 +187,4 @@ window.startVoting = () => {
 document.addEventListener('click', () => {
     if (!myId) bgmMenu.play().catch(() => {});
 }, { once: true });
+
