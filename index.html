@@ -178,15 +178,23 @@
         <p>Sua penitência não foi suficiente.</p>
     </div>
 
-    <div id="game-over-screen" class="fullscreen-overlay" style="display:none;">
+<div id="game-over-screen" class="fullscreen-overlay" style="display:none;">
         <h1 id="winner-display" class="gold-text-giant">FIM DA ERA</h1>
-        <p id="win-reason"></p>
-        <ul id="reveal-list"></ul>
-        <button onclick="location.reload()" class="btn-gold">VOLTAR AO VÉU</button>
-    </div>
+        <p id="win-reason" class="latin-text" style="margin-bottom: 20px;"></p>
+        
+        <h3>Revelação dos Papéis:</h3>
+        <div class="scroll-container" style="max-height: 200px; width: 80%; margin-bottom: 20px;">
+            <ul id="reveal-list"></ul>
+        </div>
+
+        <div class="button-group">
+            <button onclick="resetGame()" class="btn-gold">REINICIAR PENITÊNCIA</button>
+            <button onclick="location.reload()" class="btn-dark">VOLTAR AO VÉU</button>
+        </div>
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <script src="client.js"></script>
 </body>
 </html>
+
