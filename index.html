@@ -53,8 +53,7 @@
             </form>
             <div class="ornament-bottom"></div>
         </div>
-
-        <div id="lobby-screen" class="central-box" style="display:none;">
+<div id="lobby-screen" class="central-box" style="display:none;">
             <button id="btn-help" class="circle-btn">?</button>
             <h3 class="gold-text">Presentes no Claustro (<span id="player-count">0</span>)</h3>
             
@@ -69,6 +68,22 @@
                     <button id="btn-lobby-chat">Sussurrar</button>
                 </div>
             </div>
+
+            <div class="button-group">
+                <button id="btn-ready" class="btn-secondary">ESTOU PRONTO</button>
+                <button id="btn-add-bot" class="btn-dark">+ BOT</button>
+                <button id="btn-start" class="btn-gold" style="display:none;">INICIAR RITUAL</button>
+            </div>
+
+            <div id="host-controls" style="display:none; margin-top: 15px; padding-top: 10px; border-top: 1px solid #444;">
+                <p style="color: var(--gold); font-size: 0.8rem; margin-bottom: 5px;">👑 COMANDOS DO CUSTÓDIO</p>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button onclick="resetGame()" class="btn-secondary" style="font-size: 0.8rem;">↺ REINICIAR</button>
+                    <button onclick="destroyRoom()" class="btn-danger" style="font-size: 0.8rem;">☠ DERRUBAR SALA</button>
+                </div>
+            </div>
+            <button id="btn-leave" class="btn-danger" style="margin-top: 10px;">ABANDONAR A MANSÃO</button>
+        </div>
 
             <div class="button-group">
                 <button id="btn-ready" class="btn-secondary">ESTOU PRONTO</button>
@@ -162,7 +177,7 @@
         </div>
 
         <footer class="game-footer">
-            <p>SHADOW OF MYSTERY © 2024 — <span class="latin-text">Miserere Mei</span></p>
+            <p>SHADOW OF MYSTERY © 2026 — <span class="latin-text">Mystery Manu</span></p>
             <button id="btn-credits" class="footer-btn">Créditos</button>
         </footer>
     </div>
