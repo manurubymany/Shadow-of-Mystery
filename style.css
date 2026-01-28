@@ -9,10 +9,13 @@
     --bg-dark: #0a0a0a;
     --iron: #2c2c2c;
     --parchment: #d4c5a8;
-    --shadow: rgba(0, 0, 0, 0.8);
 }
 
-/* --- RESET E ESTRUTURA BASE --- */
+/* --- RESET E RESPONSIVIDADE BASE --- */
+* {
+    box-sizing: border-box; /* Impede que padding quebre a largura */
+}
+
 body {
     background-color: var(--bg-dark);
     color: var(--parchment);
@@ -20,9 +23,9 @@ body {
     margin: 0;
     display: flex;
     justify-content: center;
-    align-items: center;
-    height: 100vh;
-    overflow: hidden;
+    align-items: flex-start; /* Permite scroll se o conteúdo for longo */
+    min-height: 100vh;
+    overflow-x: hidden;
 }
 
 .grain-overlay {
@@ -34,108 +37,50 @@ body {
     z-index: 999;
 }
 
+/* --- CONTAINER PRINCIPAL (PC E MOBILE) --- */
 #game-container {
-    width: 950px;
-    height: 90vh;
+    width: 98vw;
+    max-width: 1100px; /* Limite para não esticar demais no PC */
+    margin: 10px auto;
     border: 4px double var(--gold-dim);
-    padding: 20px;
+    padding: 15px;
     background-color: #121212;
     background-image: radial-gradient(circle, #1a1a1a 0%, #0a0a0a 100%);
-    box-shadow: 0 0 40px rgba(0,0,0,1), inset 0 0 100px rgba(0,0,0,0.5);
+    box-shadow: 0 0 40px rgba(0,0,0,1);
     display: flex;
     flex-direction: column;
     position: relative;
-    z-index: 10;
+    min-height: 95vh;
 }
 
 /* --- HEADER --- */
 header.game-header {
     text-align: center;
     border-bottom: 2px solid var(--gold-dim);
-    margin-bottom: 20px;
+    margin-bottom: 15px;
     padding-bottom: 10px;
 }
 
 h1 {
     font-family: 'Pirata One', cursive;
-    font-size: 3.5em;
+    font-size: clamp(1.8em, 8vw, 3.5em); /* Ajusta o tamanho da fonte conforme a tela */
     margin: 0;
-    letter-spacing: 5px;
+    letter-spacing: 3px;
     color: var(--gold);
-    text-shadow: 2px 2px 0px black, 0 0 15px rgba(197, 160, 89, 0.4);
+    text-shadow: 2px 2px 0px black;
 }
 
-.pulse-text {
-    animation: pulseStatus 2s infinite alternate;
-}
-
-@keyframes pulseStatus {
-    from { opacity: 0.5; }
-    to { opacity: 1; color: var(--gold); }
-}
-
-/* --- TELAS (LOGIN E LOBBY) --- */
-.central-box {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--gold-dim);
-    background: rgba(0,0,0,0.8);
-    position: relative;
-    box-shadow: inset 0 0 30px black;
-    overflow: hidden;
-}
-
-#username, #password, select {
-    background: #000;
-    border: 1px solid var(--gold-dim);
-    color: var(--gold);
-    font-family: 'Cinzel', serif;
-    font-size: 1.1em;
-    padding: 12px;
-    margin-bottom: 15px;
-    width: 320px;
-    text-align: center;
-    outline: none;
-}
-
-#username:focus, #password:focus {
-    border-color: var(--blood);
-    box-shadow: 0 0 10px var(--blood);
-}
-
-/* --- BOTÕES --- */
-button {
-    background: var(--iron);
-    color: var(--gold);
-    border: 1px solid var(--gold-dim);
-    padding: 10px 20px;
-    font-family: 'Cinzel', serif;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: 0.3s;
-}
-
-button:hover {
-    background: var(--gold-dim);
-    color: white;
-}
-
-.btn-primary { font-size: 1.4em; border: 2px solid var(--gold); margin-top: 10px; }
-.btn-danger { background: #300; border-color: var(--blood); color: var(--blood-bright); }
-
-/* --- JOGO PRINCIPAL (LAYOUT) --- */
+/* --- LAYOUT FLEXÍVEL --- */
 .main-layout {
     display: flex;
-    flex-grow: 1;
+    flex-direction: row; /* Lado a lado no PC */
+    flex-wrap: wrap;    /* Permite quebrar linha se não couber */
     gap: 15px;
-    height: 100%;
+    flex-grow: 1;
 }
 
 .sidebar {
-    width: 280px;
+    flex: 1 1 250px; /* Sidebar tenta ter 250px mas se ajusta */
     background: rgba(0,0,0,0.5);
     padding: 15px;
     border: 2px solid var(--gold-dim);
@@ -144,107 +89,135 @@ button:hover {
 }
 
 .content {
-    flex-grow: 1;
+    flex: 2 1 450px; /* Conteúdo principal ganha mais espaço */
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
-/* HUD E BARRAS */
+/* --- BARRAS E HUD --- */
 .bar-container {
-    height: 14px;
+    height: 16px;
     background: #000;
     border: 1px solid var(--gold-dim);
-    margin: 8px 0;
-    box-shadow: inset 0 0 5px black;
+    margin: 5px 0;
+    width: 100%;
 }
 
-.bar-fill { height: 100%; transition: width 0.5s ease; }
-.bar-fill.sanity { background: linear-gradient(90deg, #600, var(--blood)); box-shadow: 0 0 8px var(--blood); }
-.bar-fill.spirit { background: linear-gradient(90deg, #025, #08f); box-shadow: 0 0 8px #08f; }
+.bar-fill { height: 100%; transition: width 0.4s ease; }
+.bar-fill.sanity { background: linear-gradient(90deg, #600, var(--blood)); }
+.bar-fill.spirit { background: linear-gradient(90deg, #025, #08f); }
 
-/* EXPLORAÇÃO */
-#game-world {
-    height: 200px;
-    background: #050505;
-    border: 2px solid var(--gold-dim);
-    position: relative;
+/* --- COMPONENTES DE INTERAÇÃO --- */
+.central-box {
+    padding: 20px;
+    border: 1px solid var(--gold-dim);
+    background: rgba(0,0,0,0.8);
+    width: 100%;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
 }
 
-.room-label {
-    font-family: 'Cinzel', serif;
-    font-size: 1.5em;
+#username, #password, select, input {
+    width: 100%;
+    max-width: 400px;
+    background: #000;
+    border: 1px solid var(--gold-dim);
     color: var(--gold);
-    text-shadow: 0 0 10px black;
+    padding: 12px;
+    margin-bottom: 10px;
+    font-family: 'Cinzel', serif;
 }
 
-/* LOGS E CHAT */
-.log-section { flex-grow: 1; display: flex; flex-direction: column; background: #000; border: 1px solid var(--gold-dim); }
-#log-tabs { display: flex; background: #111; border-bottom: 1px solid var(--gold-dim); }
-.tab-btn { flex: 1; padding: 10px; border: none; background: transparent; color: #666; font-size: 0.8em; }
-.tab-btn.active { color: var(--gold); background: var(--gold-dim); }
+button {
+    background: var(--iron);
+    color: var(--gold);
+    border: 1px solid var(--gold-dim);
+    padding: 10px 15px;
+    font-family: 'Cinzel', serif;
+    text-transform: uppercase;
+    cursor: pointer;
+    width: auto;
+    min-width: 120px;
+}
 
+button:hover { background: var(--gold-dim); color: #fff; }
+
+/* --- LOGS E CHAT --- */
 .log-box {
-    flex-grow: 1;
-    height: 150px;
+    height: 250px;
     overflow-y: auto;
+    background: #050505;
+    border: 1px solid var(--gold-dim);
     padding: 10px;
     font-size: 0.9em;
-    line-height: 1.4;
-    color: #aaa;
 }
 
-#chat-controls { display: flex; padding: 5px; background: #050505; }
-#chat-input { flex-grow: 1; background: #111; border: 1px solid var(--gold-dim); color: var(--gold); padding: 8px; margin-right: 5px; }
+#chat-controls {
+    display: flex;
+    gap: 5px;
+}
+
+#chat-input { flex-grow: 1; }
 
 /* --- OVERLAYS --- */
 .fullscreen-overlay {
     position: fixed;
     top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.95);
+    background: rgba(0,0,0,0.97);
+    z-index: 1000;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
-    text-align: center;
+    padding: 20px;
 }
 
-.blood-text-giant { font-family: 'Pirata One', cursive; color: var(--blood); font-size: 5em; margin: 0; }
-.death-title { font-family: 'Pirata One', cursive; color: var(--blood); font-size: 7em; text-shadow: 0 0 20px black; }
+/* --- MEDIA QUERIES (PARA MOBILE) --- */
+@media (max-width: 768px) {
+    .main-layout {
+        flex-direction: column; /* Sidebar fica em cima do conteúdo */
+    }
 
-/* INVENTÁRIO (CARTAS) */
+    .sidebar {
+        order: 2; /* No mobile, talvez você queira o jogo (content) primeiro e a ficha (sidebar) depois */
+    }
+
+    .content {
+        order: 1;
+    }
+
+    #game-container {
+        padding: 10px;
+        margin: 0;
+        width: 100vw;
+        border: none;
+    }
+
+    .log-box {
+        height: 200px;
+    }
+}
+
+/* --- ESTILOS EXTRAS (REGRAS DO JS) --- */
+.ritual-mode { animation: ritual-pulse 2s infinite; }
+@keyframes ritual-pulse { 
+    0% { box-shadow: inset 0 0 20px #000; }
+    50% { box-shadow: inset 0 0 50px var(--blood); }
+    100% { box-shadow: inset 0 0 20px #000; }
+}
+
 #card-list {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 5px;
-    padding: 0;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 10px;
     list-style: none;
+    padding: 0;
 }
 
 .codename-card {
-    width: 60px;
-    height: 85px;
+    width: 100%;
+    aspect-ratio: 2/3;
     border: 1px solid var(--gold-dim);
-    background: #000;
-    transition: 0.3s;
 }
-
-.codename-card:hover { border-color: var(--gold); transform: scale(1.1); box-shadow: 0 0 10px var(--gold); }
-
-/* NÉVOA */
-.fog-container { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
-.fog-layer { position: absolute; width: 200%; height: 100%; background: linear-gradient(to right, transparent, rgba(255,255,255,0.05), transparent); animation: fogMove 20s linear infinite; }
-@keyframes fogMove { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-
-/* DIÁRIO (PAPEL ANTIGO) */
-.diary-paper {
-    background: #c0b298 url('https://www.transparenttextures.com/patterns/old-paper.png');
-    width: 500px; height: 600px;
-    padding: 30px; border: 15px solid #2c1a1a;
-    box-shadow: 0 0 50px black; color: #1a1a1a;
-}
-#diary-text { width: 100%; height: 80%; background: transparent; border: none; font-family: 'Courier New', serif; font-size: 1.2em; resize: none; }
