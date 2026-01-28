@@ -242,10 +242,10 @@ db.ref('gameState').on('value', (snapshot) => {
         document.getElementById('death-overlay').style.display = 'none';
     }
 
-    if (state.phase === 'GAME_OVER') {
+if (state.phase === 'GAME_OVER') {
         const screen = document.getElementById('game-over-screen');
         const display = document.getElementById('winner-display');
-        screen.style.display = 'flex';
+        if (screen) screen.style.display = 'flex'; // Garante centralização
         
         if (state.winner === 'INNOCENTS') {
             display.innerText = "VOCÊS VENCERAM AS TREVAS";
@@ -268,7 +268,9 @@ function triggerDeath() {
     isDead = true;
     document.body.classList.add('dead-mode');
     const deathOverlay = document.getElementById('death-overlay');
-    deathOverlay.style.display = 'flex';
+    if (deathOverlay) {
+        deathOverlay.style.display = 'flex'; // 'flex' ativa a centralização do nosso CSS
+    }
     sfxDeath.play().catch(() => {});
 }
 
@@ -277,8 +279,10 @@ const btnStart = document.getElementById('btn-start');
 if(btnStart) {
     btnStart.onclick = () => {
         if(!isHost) return;
-        db.ref('gameState').update({ phase: 'GAME' });
-    };
+        if (state.phase === 'GAME') {
+    document.getElementById('lobby-screen').style.display = 'none';
+    const gameScreen = document.getElementById('game-screen');
+    if (gameScreen) gameScreen.style.display = 'flex'; // Isso corrige o layout no PC
 }
 
 window.startVoting = () => {
@@ -289,4 +293,5 @@ window.startVoting = () => {
 
 document.addEventListener('click', () => {
     if (!myId) bgmMenu.play().catch(() => {});
+
 }, { once: true });
