@@ -247,3 +247,106 @@ button:hover {
     width: 100%;
     padding: 10px 0;
 }
+Para completar o estilo da tela de vitória e as mensagens de "vencer as Trevas", adicionei os seletores específicos para a game-over-screen e o efeito de brilho vitorioso no seu style.css.
+
+Substitua a parte final do seu arquivo por este código:
+
+CSS
+/* --- TELAS DE FIM DE JOGO E VITÓRIA --- */
+
+#game-over-screen {
+    background: rgba(5, 5, 5, 0.98);
+    background-image: radial-gradient(circle, #1a1a1a 0%, #000 100%);
+    text-align: center;
+}
+
+.gold-text-giant {
+    font-family: 'Pirata One', cursive;
+    color: var(--gold);
+    font-size: clamp(2.5em, 10vw, 5em);
+    text-shadow: 0 0 20px rgba(197, 160, 89, 0.5);
+    margin-bottom: 10px;
+    animation: victory-glow 2s infinite alternate;
+}
+
+/* Animação para a mensagem "Vocês venceram as Trevas" */
+@keyframes victory-glow {
+    from { 
+        text-shadow: 0 0 10px var(--gold), 0 0 20px var(--gold-dim);
+        transform: scale(1);
+    }
+    to { 
+        text-shadow: 0 0 30px var(--gold), 0 0 50px var(--gold);
+        transform: scale(1.02);
+    }
+}
+
+.latin-text {
+    font-family: 'Cinzel', serif;
+    font-style: italic;
+    color: var(--parchment);
+    opacity: 0.8;
+    letter-spacing: 2px;
+}
+
+/* Ajustes para os botões específicos de Reiniciar */
+.btn-gold {
+    background: var(--gold-dim);
+    color: #fff;
+    border: 2px solid var(--gold);
+}
+
+.btn-gold:hover {
+    background: var(--gold);
+    color: var(--bg-dark);
+    box-shadow: 0 0 20px var(--gold);
+}
+
+.btn-dark {
+    background: #111;
+    color: #777;
+    border: 1px solid #333;
+}
+
+/* Estilo para a lista de revelação de papéis no fim */
+#reveal-list {
+    list-style: none;
+    padding: 0;
+    margin: 20px auto;
+    text-align: left;
+    display: inline-block;
+}
+
+#reveal-list li {
+    padding: 8px 15px;
+    border-bottom: 1px solid var(--gold-dim);
+    font-family: 'Cinzel', serif;
+}
+
+/* Scrollbar temática para a lista de revelação */
+.scroll-container::-webkit-scrollbar {
+    width: 6px;
+}
+.scroll-container::-webkit-scrollbar-track {
+    background: #000;
+}
+.scroll-container::-webkit-scrollbar-thumb {
+    background: var(--gold-dim);
+}
+
+/* --- OVERLAY DE VOTAÇÃO (TRIBUNAL) --- */
+.blood-text-giant {
+    font-family: 'Pirata One', cursive;
+    color: var(--blood-bright);
+    font-size: clamp(2em, 8vw, 4em);
+    text-shadow: 0 0 15px #000;
+    margin: 0;
+}
+
+.subtitle {
+    font-family: 'Cinzel', serif;
+    color: var(--parchment);
+    letter-spacing: 3px;
+    margin-bottom: 30px;
+}
+
