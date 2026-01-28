@@ -1,10 +1,9 @@
 // --- CONFIGURAÇÃO FIREBASE ---
-// Certifique-se de que o firebaseConfig está correto com suas chaves se precisar
 const firebaseConfig = {
     databaseURL: "https://shadow-of-mystery-default-rtdb.firebaseio.com/"
 };
 
-// Verifica se o Firebase já foi iniciado para evitar erro de duplicidade
+// Verifica se o Firebase já foi iniciado
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
@@ -56,7 +55,7 @@ function joinGameFirebase(name) {
     const playerId = 'player_' + Date.now() + Math.random().toString(36).substr(2, 5);
     const playerData = {
         id: playerId, 
-        name: name, // Aqui você salva como 'name'
+        name: name,
         room: 'Salão',
         sanity: 10, isReady: false, isDead: false,
         role: 'Desconhecido', pathway: '???', inventory: [], clues: [], diary: "", level: 1
@@ -92,56 +91,68 @@ function addLog(text, color = null, tab = 'system') {
     targetBox.scrollTop = targetBox.scrollHeight;
 }
 
-// --- SINCRONIZAÇÃO E LÓGICA DE JOGADORES (AQUI ESTAVA O ERRO) ---
+// --- SINCRONIZAÇÃO E LÓGICA DE JOGADORES ---
 db.ref('players').on('value', (snapshot) => {
     const val = snapshot.val();
-    
-    // 1. Converte o Objeto do Firebase em Array
+    // 1. Converte objeto em lista
     currentPlayers = val ? Object.values(val) : [];
     
-    // ========================================================
-    // CORREÇÃO: ATUALIZA A TELA DO LOBBY
-    // ========================================================
+    // --- SEGURANÇA: DETECTA SE A SALA FOI DESTRUÍDA ---
+    // Se eu tenho ID (já loguei), mas não estou na lista que veio do banco...
+    if (myId && !currentPlayers.find(p => p.id === myId)) {
+        alert("A sala foi dissolvida pelo Custódio.");
+        localStorage.removeItem('vc_playerId');
+        location.reload(); // Chuta o jogador de volta pro login
+        return;
+    }
+    // ---------------------------------------------------
+
+    // 2. Atualiza Lista Visual no Lobby
     const lobbyList = document.getElementById('player-list');
     const lobbyCount = document.getElementById('player-count');
 
     if (lobbyList && lobbyCount) {
-        lobbyList.innerHTML = ''; // Limpa a lista antiga
-        lobbyCount.innerText = currentPlayers.length; // Atualiza o número
+        lobbyList.innerHTML = '';
+        lobbyCount.innerText = currentPlayers.length;
 
         currentPlayers.forEach(p => {
             const li = document.createElement('li');
-            // Exibe o nome e se está morto ou vivo
-            li.innerHTML = `
-                <span style="color: ${p.isDead ? 'red' : 'var(--gold)'}">
-                    ${p.name}
-                </span>
-            `;
+            li.innerHTML = `<span style="color: ${p.isDead ? 'red' : 'var(--gold)'}">${p.name}</span>`;
             lobbyList.appendChild(li);
         });
     }
-    // ========================================================
 
-    // Lógica de Host
+    // 3. Lógica de Host (Quem manda na sala)
     if (currentPlayers.length > 0) {
         const sorted = currentPlayers.sort((a, b) => a.id.localeCompare(b.id));
-        if (sorted[0].id === myId && !isHost) {
+        
+        // O jogador mais antigo vira o Host
+        if (sorted[0].id === myId) {
+            if (!isHost) addLog("Você assumiu a custódia desta sessão.", "var(--gold)");
             isHost = true;
-            addLog("Você assumiu a custódia desta sessão.", "var(--gold)");
-            
-            // Mostra o botão de iniciar apenas para o Host
+
+            // Mostra botões de Host
             const btnStart = document.getElementById('btn-start');
+            const hostControls = document.getElementById('host-controls');
             if(btnStart) btnStart.style.display = 'inline-block';
+            if(hostControls) hostControls.style.display = 'block';
+        } else {
+            isHost = false;
+            // Esconde botões se não for Host
+            const btnStart = document.getElementById('btn-start');
+            const hostControls = document.getElementById('host-controls');
+            if(btnStart) btnStart.style.display = 'none';
+            if(hostControls) hostControls.style.display = 'none';
         }
     }
 
-    // VERIFICAÇÃO DE VITÓRIA
+    // 4. Verificação de Vitória
     const assassin = currentPlayers.find(p => p.role === 'Carrasco' || p.pathway === 'Caminho da Morte');
     if (assassin && assassin.isDead && gameState?.phase === 'GAME') {
         db.ref('gameState').update({ phase: 'GAME_OVER', winner: 'INNOCENTS' });
     }
     
-    // Atualiza barra de sanidade do próprio jogador
+    // 5. Atualiza barra de sanidade do próprio jogador
     const me = currentPlayers.find(p => p.id === myId);
     if (me) {
         const sBar = document.getElementById('sanity-bar');
@@ -156,27 +167,55 @@ db.ref('players').on('value', (snapshot) => {
     }
 });
 
-// --- REINICIAR O JOGO ---
+// --- REINICIAR O JOGO (SOFT RESET) ---
 window.resetGame = () => {
     if (!isHost) {
-        alert("Apenas o Custódio (Host) pode reiniciar a penitência.");
+        alert("Apenas o Custódio pode reiniciar.");
         return;
     }
+    
+    if (!confirm("Tem certeza? Isso vai zerar inventários e papéis de todos.")) return;
 
     const updates = {};
-    updates['gameState/phase'] = 'LOBBY'; 
-    updates['gameState/ritualActive'] = false;
-    updates['gameState/winner'] = null;
+    updates['gameState'] = {
+        phase: 'LOBBY', 
+        ritualActive: false, 
+        winner: null
+    };
     
+    // Reseta status de todos os jogadores
     currentPlayers.forEach(p => {
         updates[`players/${p.id}/isDead`] = false;
         updates[`players/${p.id}/sanity`] = 10;
         updates[`players/${p.id}/isReady`] = false;
+        updates[`players/${p.id}/role`] = 'Desconhecido';
+        updates[`players/${p.id}/pathway`] = '???';
+        updates[`players/${p.id}/inventory`] = [];
+        updates[`players/${p.id}/clues`] = [];
+        updates[`players/${p.id}/diary`] = "";
     });
 
     db.ref().update(updates).then(() => {
-        addLog("O tempo foi redefinido.", "var(--gold)");
+        addLog("O tempo foi redefinido pelo Custódio.", "var(--gold)");
     });
+};
+
+// --- DERRUBAR A SALA (HARD RESET) ---
+window.destroyRoom = () => {
+    if (!isHost) return;
+    
+    const code = prompt("Para destruir a sala e expulsar todos, digite: FIM");
+    
+    if (code === "FIM" || code === "fim") {
+        // Remove todos os jogadores do banco
+        db.ref('players').remove();
+        
+        // Reseta o estado
+        db.ref('gameState').set({ phase: 'LOBBY' });
+        
+        // O próprio host recarrega a página
+        location.reload();
+    }
 };
 
 // --- GERENCIAMENTO DE ESTADO DO JOGO ---
@@ -191,12 +230,13 @@ db.ref('gameState').on('value', (snapshot) => {
         document.getElementById('game-screen').style.display = 'flex';
     }
     
-    // Se voltou para o Lobby
+    // Se voltou para o Lobby (Reinício)
     if (state.phase === 'LOBBY') {
         document.getElementById('game-screen').style.display = 'none';
         document.getElementById('game-over-screen').style.display = 'none';
         document.getElementById('lobby-screen').style.display = 'flex';
-        // Reset local
+        
+        // Reset local visual
         isDead = false;
         document.body.classList.remove('dead-mode');
         document.getElementById('death-overlay').style.display = 'none';
