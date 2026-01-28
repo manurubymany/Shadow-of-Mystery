@@ -361,4 +361,33 @@ CSS
     margin-bottom: 30px;
 }
 
+/* --- AJUSTE FINAL: TELAS FIXAS E CENTRALIZADAS --- */
+
+.fullscreen-overlay {
+    position: fixed;     /* Tira o elemento do fluxo e fixa na tela */
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    display: none;       /* Começa escondido, o JS ativa como 'flex' */
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;      /* Garante que fica na frente de tudo */
+    background: rgba(0, 0, 0, 0.95);
+    text-align: center;
+}
+
+/* Estilo específico para a morte */
+#death-overlay {
+    background: radial-gradient(circle, #200000 0%, #000 100%);
+}
+
+.death-title {
+    font-family: 'Pirata One', cursive;
+    color: var(--blood-bright);
+    font-size: clamp(3em, 12vw, 6em);
+    text-shadow: 0 0 30px #000;
+    margin: 0;
+}
 
